@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    image: escape-app:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Fallbacks, falls nicht in .env gesetzt
+      PORT: ${PORT:-3000}
+      ORIGIN: ${ORIGIN:-http://localhost:5173}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/escape}
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks: [webnet]
+
+  scoreworker:
+    # nutzt dasselbe Image/Repo, startet aber das Worker-Skript
+    build: .
+    image: escape-app:latest
+    command: ["node", "src/worker/scoreWorker.js"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/escape}
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks: [webnet]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    networks: [webnet]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - redis_data:/data
+    networks: [webnet]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: escape
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d escape"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [webnet]
+    # optional zum lokalen Debuggen:
+    # ports:
+    #   - "5432:5432"
+
+networks:
+  webnet:
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:
+  pg_data:
