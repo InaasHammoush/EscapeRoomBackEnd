@@ -1,4 +1,5 @@
 import { createClient } from 'redis';
+import crypto from 'node:crypto';
 import { upsertProfile, insertScore } from '../infra/db.js';
 import dotenv from 'dotenv';
 dotenv.config();
