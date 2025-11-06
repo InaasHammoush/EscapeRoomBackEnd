@@ -7,9 +7,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      # Fallbacks, falls nicht in .env gesetzt
       PORT: ${PORT:-3000}
-      ORIGIN: ${ORIGIN:-http://localhost:5173}
+      ORIGIN: ${ORIGIN:-http://localhost}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/escape}
       NODE_ENV: ${NODE_ENV:-production}
@@ -21,10 +20,9 @@ services:
     networks: [webnet]
 
   scoreworker:
-    # nutzt dasselbe Image/Repo, startet aber das Worker-Skript
     build: .
     image: escape-app:latest
-    command: ["node", "src/worker/scoreWorker.js"]
+    command: ["node","src/worker/scoreWorker.js"]
     restart: unless-stopped
     env_file: .env
     environment:
@@ -38,18 +36,28 @@ services:
         condition: service_healthy
     networks: [webnet]
 
+  # Frontend aus dem separaten Repo bauen
+  frontend:
+    build:
+      context: ../EscapeRoomFrontend
+      dockerfile: Dockerfile
+    image: escape-frontend:latest
+    restart: unless-stopped
+    networks: [webnet]
+
   caddy:
     image: caddy:2
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
+      - "443:443"   # optional, TLS kann später dazu
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - app
+      - frontend
     networks: [webnet]
 
   redis:
@@ -81,7 +89,7 @@ services:
       timeout: 3s
       retries: 20
     networks: [webnet]
-    # optional zum lokalen Debuggen:
+    # optional: zum lokalen Debuggen
     # ports:
     #   - "5432:5432"
 
