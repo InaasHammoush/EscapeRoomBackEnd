@@ -88,11 +88,14 @@ try {
 const jsonStore = new JsonStore({ file: './data/runtime.json' });
 await jsonStore.load();
 const rooms = new RoomManager({ redis: redisPub, snapshotTTL: 3600, store: jsonStore });
+rooms.startAutosave(30000); // alle 30s speichern
+rooms.setCleanupInterval(600000, 600000); // each 10 minutes, clean rooms older that 10 minutes
 
 // ------------------------------------------------------------
 // 5) Socket-Event-Handler – alle via onSafe() (Schema-Validierung + Fehlerantworten)
 // ------------------------------------------------------------
 io.on('connection', (socket) => {
+  console.log('⚡ Socket.IO: connection attempt detected');
   console.log('socket connected', socket.id);
 
   // Raum anlegen
@@ -104,7 +107,7 @@ io.on('connection', (socket) => {
   // Raum beitreten
   onSafe(socket, 'join_room', schemas.JoinRoom, async ({ roomId, name }, cb) => {
     try {
-      rooms.joinRoom(roomId, socket.id, name);
+      await rooms.joinRoom(roomId, socket.id, name);
       socket.join(roomId);
       // Lobby-Status an alle im Raum
       io.to(roomId).emit('lobby_update', rooms.publicRoom(roomId));

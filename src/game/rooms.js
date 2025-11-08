@@ -97,7 +97,10 @@ export class RoomManager {
   }
 
   /** Spieler beitreten lassen (mit optionaler Profil-ID) */
-  joinRoom(id, socketId, name = 'Player', profileId = null) {
+  async joinRoom(id, socketId, name = 'Player', profileId = null) {
+    if (!this.rooms.has(id) && this.redis) {
+      await this.loadSnapshot(id);
+    }
     const room = this.get(id);
     if (!room) throw new Error('ROOM_NOT_FOUND');
     room.players.set(socketId, { name: String(name), ready: false, profileId: profileId || null });
@@ -205,6 +208,56 @@ export class RoomManager {
     const snap = JSON.stringify(this.snapshot(id));
     await this.redis.set(key, snap, { EX: this.snapshotTTL });
   }
+  
+  /** Periodisches Speichern aller Räume (z.B. alle 30s) */
+  startAutosave(intervalMs = 30000) {
+    setInterval(() => {
+      for (const id of this.rooms.keys()) this._saveSnapshot(id).catch(()=>{});
+    }, intervalMs).unref();
+  }
+
+  /** Redis-Snapshot laden und Raum rehydrieren */
+  async loadSnapshot(id) {
+    if (!this.redis) return null;
+    const key = `room:${id}:snapshot`;
+    const snap = await this.redis.get(key);
+    if (!snap) return null;
+    const data = JSON.parse(snap);
+    // reconstruct minimal room container
+    const room = {
+      id,
+      epoch: Date.now(),
+      seq: data.seq ?? 0,
+      started: data.started ?? false,
+      completed: data.completed ?? false,
+      players: new Map(), // empty; will repopulate on rejoin
+      state: { public: data.state, internal: {...data.state} }
+    };
+    this.rooms.set(id, room);
+    return room;
+  }
+
+  /** Leere Räume aufräumen (ohne Spieler, älter als ttlMs) */
+  cleanupEmptyRooms(ttlMs = 600000) { // 10 minutes
+    const now = Date.now();
+    for (const [id, room] of this.rooms) {
+      const hasPlayers = room.players.size > 0;
+      const age = now - (room.completedAt || room.startedAt || room.createdAt);
+      if (!hasPlayers && age > ttlMs) {
+        this.rooms.delete(id);
+        if (this.store) this.store.delete(`room:${id}:snapshot`);
+        console.log(`[cleanup] Removed empty room ${id}`);
+      }
+    }
+  }
+
+  /** set interval for automatic room cleanup */
+  setCleanupInterval(intervalMs = 600000, ttlMs = 600000) { // every 10 minutes
+    setInterval(() => {
+      this.cleanupEmptyRooms(ttlMs);
+    }, intervalMs).unref();
+  }
+
 
   /** Optionaler JSON-Store (lokale Dev-Persistenz) */
   _persistLocal(id) {
