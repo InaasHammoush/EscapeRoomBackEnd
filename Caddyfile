@@ -1,0 +1,21 @@
+:80 {
+  encode zstd gzip
+
+  # WebSockets/Socket.IO an Backend
+  handle_path /socket.io* {
+    reverse_proxy app:3000
+  }
+
+  # (Optional) REST-API-/health-Routen an Backend
+  handle /api* {
+    reverse_proxy app:3000
+  }
+  handle /healthz {
+    reverse_proxy app:3000
+  }
+
+  # Alles andere an Frontend
+  handle {
+    reverse_proxy frontend:80
+  }
+}
