@@ -16,6 +16,9 @@ import { createClient } from 'redis';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { JsonStore } from './store/jsonStore.js';
 import { ensureDb } from './infra/db.js';
+import authRoutes from './routes/auth.routes.js';
+import cookieParser from 'cookie-parser';
+import tokenRoutes from './routes/token.routes.js';
 
 // Eigene Hilfen/Domain-Module
 import { onSafe, schemas } from './util/validation.js';
@@ -42,6 +45,12 @@ app.set('trust proxy', 1);
 // Health-/Info-Endpunkte (Monitoring/Debug)
 app.get('/healthz', (_req, res) => res.status(200).send('ok'));
 app.get('/version', (_req, res) => res.json({ version: process.env.npm_package_version ?? 'dev' }));
+
+// Auth routes (Registration and Login)
+app.use('/api/auth', authRoutes);
+app.use(cookieParser());
+app.use('/api/token', tokenRoutes);
+
 
 // HTTP-Serverhülle für Socket.IO
 const httpServer = http.createServer(app);

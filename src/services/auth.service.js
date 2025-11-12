@@ -1,0 +1,42 @@
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { createUser, findUserByEmail } from '../models/user.model.js';
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const REFRESH_SECRET = process.env.REFRESH_SECRET;
+
+export async function registerUser({ username, email, password }) {
+  const existing = await findUserByEmail(email);
+  if (existing) throw new Error('Email already registered');
+
+  const hash = await bcrypt.hash(password, 10);
+  return await createUser(username, email, hash);
+}
+
+export async function loginUser({ email, password }) {
+  const user = await findUserByEmail(email);
+  if (!user) throw new Error('Invalid credentials');
+
+  const valid = await bcrypt.compare(password, user.password_hash);
+  if (!valid) throw new Error('Invalid credentials');
+
+  // Short-lived access token
+  const accessToken = jwt.sign(
+    { id: user.id, username: user.username },
+    JWT_SECRET,
+    { algorithm: 'HS256', expiresIn: '15m' }
+  );
+
+  // Long-lived refresh token
+  const refreshToken = jwt.sign(
+    { id: user.id },
+    REFRESH_SECRET,
+    { algorithm: 'HS256', expiresIn: '7d' }
+  );
+
+  return {
+    accessToken,
+    refreshToken,
+    user: { id: user.id, username: user.username },
+  };
+}

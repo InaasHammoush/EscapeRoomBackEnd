@@ -23,6 +23,17 @@ export const schemas = {
   })
 };
 
+export const registerSchema = z.object({
+  username: z.string().min(3),
+  email: z.email(),
+  password: z.string().min(8),
+});
+
+export const loginSchema = z.object({
+  email: z.email(),
+  password: z.string().min(1),
+});
+
 /**
  * Wrappt socket.on(...) mit Payload-Validierung & Fehlerbehandlung
  */
