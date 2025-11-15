@@ -38,3 +38,14 @@ export async function logout(req, res) {
   res.clearCookie('refreshToken');
   res.json({ message: 'Logged out successfully' });
 }
+
+export async function verifyEmail(req, res) {
+  try {
+    const { token } = req.params;
+    await AuthService.verifyEmailToken(token);
+    res.json({ success: true, message: 'Email verified successfully' }); // temporary until the frontend page is ready
+    // res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+}
