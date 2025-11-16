@@ -1,22 +1,35 @@
+// src/tests/testRoomManager.js
+import assert from 'node:assert/strict';
 import { RoomManager } from '../game/rooms.js';
 
-const rooms = new RoomManager({ redis: null, store: null });
-const r = rooms.createRoom();
-console.log('Created room', r.id);
+async function main() {
+  const rooms = new RoomManager({ redis: null, store: null });
 
-rooms.joinRoom(r.id, 'socket1', 'Alice');
-rooms.joinRoom(r.id, 'socket2', 'Bob');
+  const room = rooms.createRoom();
+  console.log('Created room', room.id);
 
-rooms.setReady(r.id, 'socket1', true);
-rooms.setReady(r.id, 'socket2', true);
+  await rooms.joinRoom(room.id, 'socket1', 'Alice');
+  await rooms.joinRoom(room.id, 'socket2', 'Bob');
 
-rooms.start(r.id);
+  rooms.setReady(room.id, 'socket1', true);
+  rooms.setReady(room.id, 'socket2', true);
 
-const result = rooms.applyAction(r.id, {
-  actionId: '1',
-  playerId: 'socket1',
-  objectId: 'switch:A',
-  verb: 'toggle'
+  assert.equal(rooms.allReady(room.id), true, 'Alle Spieler sollten ready sein');
+
+  rooms.start(room.id);
+
+  const result = rooms.applyAction(room.id, {
+    actionId: '1',
+    playerId: 'socket1',
+    objectId: 'switch:A',
+    verb: 'toggle'
+  });
+
+  console.log('Action result:', result);
+  console.log('Snapshot:', rooms.snapshot(room.id));
+}
+
+main().catch(err => {
+  console.error(err);
+  process.exit(1);
 });
-console.log('Action result:', result);
-console.log('Snapshot:', rooms.snapshot(r.id));

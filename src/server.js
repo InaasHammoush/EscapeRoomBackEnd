@@ -1,10 +1,6 @@
 // src/server.js
 // ------------------------------------------------------------
 // Escape-Room Backend – Express + Socket.IO + Redis Adapter
-// Präzise kommentierte Basis, lauffähig mit den Modulen
-//   - ./util/validation.js   (onSafe + zod-Schemas)
-//   - ./game/rooms.js        (RoomManager + Puzzle-Dispatch)
-// Node.js: ESM aktiv (package.json -> { "type": "module" })
 // ------------------------------------------------------------
 
 import express from 'express';
@@ -14,17 +10,22 @@ import dotenv from 'dotenv';
 import { Server } from 'socket.io';
 import { createClient } from 'redis';
 import { createAdapter } from '@socket.io/redis-adapter';
+import jwt from 'jsonwebtoken';
+import cookieParser from 'cookie-parser';
+
 import { JsonStore } from './store/jsonStore.js';
 import { ensureDb } from './infra/db.js';
 import authRoutes from './routes/auth.routes.js';
-import cookieParser from 'cookie-parser';
 import tokenRoutes from './routes/token.routes.js';
 
 // Eigene Hilfen/Domain-Module
 import { onSafe, schemas } from './util/validation.js';
 import { RoomManager } from './game/rooms.js';
+import { authenticateToken } from './middleware/auth.js';
 
 dotenv.config(); // .env einlesen (PORT, ORIGIN, REDIS_URL, ...)
+
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // ------------------------------------------------------------
 // 1) Basis-HTTP-Server (Express) + Standard-Middleware
@@ -37,20 +38,27 @@ const app = express();
 
 // CORS: erlaubt Aufrufe vom Frontend (idealerweise gleicher Origin)
 app.use(cors({ origin: ORIGINS, credentials: true }));
-app.use(express.json()); // JSON-Body-Parsing für evtl. REST-Hilfsrouten
+app.use(express.json());   // JSON-Body-Parsing für REST-Hilfsrouten
+app.use(cookieParser());   // Cookies z. B. für Refresh-Token
 
 // Wenn später ein Proxy (z. B. Caddy) davor steht, richtige IP/Proto erkennen
 app.set('trust proxy', 1);
 
 // Health-/Info-Endpunkte (Monitoring/Debug)
 app.get('/healthz', (_req, res) => res.status(200).send('ok'));
-app.get('/version', (_req, res) => res.json({ version: process.env.npm_package_version ?? 'dev' }));
+app.get('/version', (_req, res) =>
+  res.json({ version: process.env.npm_package_version ?? 'dev' })
+);
 
 // Auth routes (Registration and Login)
 app.use('/api/auth', authRoutes);
-app.use(cookieParser());
 app.use('/api/token', tokenRoutes);
 
+// Kleine Test-Route für Access-Token: gibt den im JWT kodierten User zurück
+app.get('/api/me', authenticateToken, (req, res) => {
+  // req.user wird in middleware/auth.js aus dem Access-Token befüllt
+  res.json({ user: req.user });
+});
 
 // HTTP-Serverhülle für Socket.IO
 const httpServer = http.createServer(app);
@@ -61,13 +69,46 @@ const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   // CORS-Spiegelung wie oben – wichtig für lokale Entwicklung
   cors: { origin: ORIGINS, credentials: true },
-  path: '/socket.io',                // explizit, Standard ist ebenfalls /socket.io
+  path: '/socket.io',                 // explizit, Standard ist ebenfalls /socket.io
   transports: ['websocket', 'polling'] // robust: bevorzugt WS, Fallback auf Polling
+});
+
+// Auth-Hook für Socket.IO (JWT optional auswerten)
+io.use((socket, next) => {
+  const auth = socket.handshake.auth || {};
+  const headers = socket.handshake.headers || {};
+
+  let token = null;
+
+  // Bevorzugt: Client übergibt token im auth-Feld
+  if (auth.token) {
+    token = auth.token;
+  } else if (typeof headers.authorization === 'string' &&
+             headers.authorization.startsWith('Bearer ')) {
+    token = headers.authorization.substring('Bearer '.length);
+  }
+
+  if (!token || !JWT_SECRET) {
+    // Kein Token oder Secret → als Gast behandeln
+    return next();
+  }
+
+  jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }, (err, decoded) => {
+    if (err) {
+      console.warn('Socket JWT invalid:', err.message);
+      // Für jetzt: trotzdem verbinden, aber ohne user-Info
+      return next();
+      // Wenn ihr später nur authentifizierte Sockets wollt:
+      // return next(new Error('UNAUTHORIZED'));
+    }
+    // decoded enthält z.B. { id, username, iat, exp }
+    socket.data.user = decoded;
+    return next();
+  });
 });
 
 // ------------------------------------------------------------
 // 3) Redis-Anbindung – Socket.IO-Adapter + Runtime-Hilfen
-//    (Pub/Sub für Broadcasts zwischen Instanzen, Snapshots, Locks…)
 // ------------------------------------------------------------
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const redisPub = createClient({ url: redisUrl });
@@ -79,26 +120,29 @@ await redisSub.connect();
 // Socket.IO über Redis skalierbar machen (instanzübergreifende Rooms/Broadcasts)
 io.adapter(createAdapter(redisPub, redisSub));
 
-// DB-Schema sicherstellen
+// DB-Schema sicherstellen (altes ensureDb, optional – für neue Tabellen nutzt ihr scripts/init-db.js)
 try {
   await ensureDb();
   console.log('PostgreSQL ready (schema ensured)');
 } catch (e) {
   console.warn('ensureDb() failed:', e?.message || e);
-  // Optional: process.exit(1) wenn DB zwingend sein soll
 }
 
 // ------------------------------------------------------------
 // 4) Room-Manager initialisieren (autoritativer In-Memory-State)
-//    - hält Rooms & Spieler
-//    - kapselt Snapshot/Apply-Logik (Puzzle-FSM via ./game/puzzles)
 // ------------------------------------------------------------
-
 const jsonStore = new JsonStore({ file: './data/runtime.json' });
 await jsonStore.load();
-const rooms = new RoomManager({ redis: redisPub, snapshotTTL: 3600, store: jsonStore });
-rooms.startAutosave(30000); // alle 30s speichern
-rooms.setCleanupInterval(600000, 600000); // each 10 minutes, clean rooms older that 10 minutes
+
+const rooms = new RoomManager({
+  redis: redisPub,
+  snapshotTTL: 3600,
+  store: jsonStore
+});
+
+// periodische Snapshots & Aufräumen leerer Räume
+rooms.startAutosave(30000);                // alle 30s speichern
+rooms.setCleanupInterval(600000, 600000);  // alle 10min Räume bereinigen, die älter als 10min sind
 
 // ------------------------------------------------------------
 // 5) Socket-Event-Handler – alle via onSafe() (Schema-Validierung + Fehlerantworten)
@@ -116,13 +160,25 @@ io.on('connection', (socket) => {
   // Raum beitreten
   onSafe(socket, 'join_room', schemas.JoinRoom, async ({ roomId, name }, cb) => {
     try {
-      await rooms.joinRoom(roomId, socket.id, name);
-      socket.join(roomId);
-      // Lobby-Status an alle im Raum
-      io.to(roomId).emit('lobby_update', rooms.publicRoom(roomId));
-      // eigenen Snapshot an den neuen Client
-      cb?.({ ok: true, snapshot: rooms.snapshot(roomId) });
+      const user = socket.data.user;
+      const displayName = user?.username || name;   // JWT-Name schlägt manuelles Feld
+      const profileId = user?.id || null;           // Für Stats/room_participants
+
+      // joinRoom ist async, weil es ggf. einen Snapshot aus Redis lädt
+      const room = await rooms.joinRoom(roomId, socket.id, displayName, profileId);
+
+      // Socket dem Socket.IO-Room zuordnen
+      socket.join(room.id);
+
+      // Lobby-Status an alle im Raum senden
+      const publicRoom = rooms.publicRoom(room.id);
+      io.to(room.id).emit('lobby_update', publicRoom);
+
+      // eigenen Snapshot an den neuen Client zurückgeben
+      const snapshot = rooms.snapshot(room.id);
+      cb?.({ ok: true, snapshot });
     } catch (e) {
+      console.error('join_room failed:', e);
       cb?.({ ok: false, error: e.message || 'ROOM_JOIN_FAILED' });
     }
   });
@@ -152,7 +208,11 @@ io.on('connection', (socket) => {
   onSafe(socket, 'interact', schemas.Interact, async (payload, cb) => {
     const { roomId, actionId, objectId, verb, data } = payload;
     const result = rooms.applyAction(roomId, {
-      actionId, playerId: socket.id, objectId, verb, data
+      actionId,
+      playerId: socket.id,
+      objectId,
+      verb,
+      data
     });
     if (!result.ok) return cb?.(result);
     // Delta an alle Clients im Raum senden
