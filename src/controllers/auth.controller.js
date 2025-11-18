@@ -62,3 +62,27 @@ export async function changePassword(req, res) {
     res.status(400).json({ success: false, message: err.message});
   }
 }
+
+export async function resetPasswordRequest(req, res) {
+  try {
+    const { email } = req.body;
+    await AuthService.requestPasswordReset(email);
+    res.json({ success: true, message: 'Password reset email sent if the email is registered'});
+
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message});
+  }
+}
+
+export async function resetPassword(req, res) {
+  try {
+    const { token } = req.params;
+    const { newPassword } = req.body;
+
+    await AuthService.resetUserPasswordWithToken(token, newPassword);
+
+    res.json({ success: true, message: 'Password has been reset successfully'});
+  } catch (err) {
+    res.status(400).json({ success: false, message: err. message});
+  }
+}
