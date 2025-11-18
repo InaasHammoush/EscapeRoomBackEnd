@@ -45,19 +45,6 @@ transporter.verify((error) => {
   }
 });
 
-// Wrap in an async IIFE so we can use await.
-(async () => {
-  const info = await transporter.sendMail({
-    from: '"Escaperoom test" <aurelie57@ethereal.email>',
-    to: "bar@example.com, baz@example.com",
-    subject: "testing emails",
-    text: "did you receive this email?", // plain‑text body
-    html: "<b>did you receive this email?</b>", // HTML body
-  });
-
-  log.info("Message sent:", info.messageId);
-})();
-
 /**
  * Email service for sending various types of emails
  */
@@ -69,7 +56,7 @@ transporter.verify((error) => {
  * @property {Function} sendEmail - Core function to send emails with customizable content
  * @property {Function} sendVerificationEmail - Sends account verification emails
  * @property {Function} sendPasswordResetEmail - Sends password reset emails
- * @property {Function} sendChangePasswordEmail - Notifies users about password changes
+ * @property {Function} sendPasswordChangedEmail - Notifies users about password changes
  * @property {Function} sendWelcomeEmail - Sends welcome emails to new users
  *
  * @example
@@ -188,6 +175,29 @@ const emailService = {
 			throw error; // Re-throw to handle in controller
 		}
 	},
+
+	async sendPasswordChangedEmail(email) {
+		try{
+			log.debug(`Sending password changed notification email to ${email}`);
+
+			const content = `
+		<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+		  <h2>Password Changed Successfully</h2>
+		  <p>This is a confirmation that the password for your account has just been changed.</p>
+		  <p>If you did not make this change, please contact our support team immediately.</p>
+		  <p>Best regards,<br>The EscapeRoom Team</p>
+		</div>
+	  `;
+
+	  		return await this.sendEmail(email, "Your EscapeRoom Password Has Been Changed", content);
+		}
+		catch (error) {
+			log.error(`Failed to send password changed email to ${email}`, {
+				error: error.message,
+			});
+			throw error; // Re-throw to handle in controller
+		}
+	}
 };
 
 export default emailService;

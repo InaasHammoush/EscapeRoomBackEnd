@@ -49,3 +49,16 @@ export async function verifyEmail(req, res) {
     res.status(400).json({ success: false, message: err.message });
   }
 }
+
+export async function changePassword(req, res) {
+  try{
+    const userID = req.user.id;
+    const { oldPassword, newPassword } = req.body;
+
+    await AuthService.changeUserPassword(userID, oldPassword, newPassword);
+
+    res.json({ success: true, message: 'Password changed successfully'});
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message});
+  }
+}

@@ -73,3 +73,17 @@ function generateVerificationToken() {
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
   return {token, hashedToken};
 }
+
+export async function changeUserPassword(userID, oldPassword, newPassword) {
+  const user = await userModel.findUserById(userID);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const valid = await bcrypt.compare(oldPassword, user.password_hash);
+  if (!valid) {
+    throw new Error("Password incorrect");
+  }
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await userModel.updateUserPassword(userID, hashedPassword);
+  await emailService.sendPasswordChangedEmail(user.email);
+}

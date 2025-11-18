@@ -30,3 +30,17 @@ export async function verifyUserEmail(userId) {
   );
 }
 
+export async function findUserById(userID) {
+  const user = await db.query(
+    `SELECT * FROM users WHERE id = $1`,
+    [userID]
+  );
+  return user.rows[0];
+}
+
+export async function updateUserPassword(userID, newPasswordHash) {
+  await db.query(
+    `UPDATE users SET password_hash = $1 WHERE id = $2`,
+    [newPasswordHash, userID]
+  );
+}
