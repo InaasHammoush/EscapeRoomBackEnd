@@ -14,7 +14,6 @@ import jwt from 'jsonwebtoken';
 import cookieParser from 'cookie-parser';
 
 import { JsonStore } from './store/jsonStore.js';
-import { ensureDb } from './infra/db.js';
 import authRoutes from './routes/auth.routes.js';
 import tokenRoutes from './routes/token.routes.js';
 
@@ -119,14 +118,6 @@ await redisSub.connect();
 
 // Socket.IO über Redis skalierbar machen (instanzübergreifende Rooms/Broadcasts)
 io.adapter(createAdapter(redisPub, redisSub));
-
-// DB-Schema sicherstellen (altes ensureDb, optional – für neue Tabellen nutzt ihr scripts/init-db.js)
-try {
-  await ensureDb();
-  console.log('PostgreSQL ready (schema ensured)');
-} catch (e) {
-  console.warn('ensureDb() failed:', e?.message || e);
-}
 
 // ------------------------------------------------------------
 // 4) Room-Manager initialisieren (autoritativer In-Memory-State)

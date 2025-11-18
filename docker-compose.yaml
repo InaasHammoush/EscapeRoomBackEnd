@@ -3,9 +3,9 @@ version: "3.9"
 services:
   app:
     build: .
-    image: escape-app:latest
+    image: escaperoom-backend:latest
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.docker
     environment:
       PORT: ${PORT:-3000}
       ORIGIN: ${ORIGIN:-http://localhost}
@@ -17,14 +17,15 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    networks: [webnet]
+    networks:
+      - webnet
 
   scoreworker:
     build: .
-    image: escape-app:latest
-    command: ["node","src/worker/scoreWorker.js"]
+    image: escaperoom-backend:latest
+    command: ["node", "src/worker/scoreWorker.js"]
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.docker
     environment:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/escape}
@@ -34,23 +35,24 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    networks: [webnet]
+    networks:
+      - webnet
 
-  # Frontend aus dem separaten Repo bauen
   frontend:
     build:
       context: ../EscapeRoomFrontend
       dockerfile: Dockerfile
-    image: escape-frontend:latest
+    image: escaperoom-frontend:latest
     restart: unless-stopped
-    networks: [webnet]
+    networks:
+      - webnet
 
   caddy:
     image: caddy:2
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"   # optional, TLS kann später dazu
+      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -58,7 +60,8 @@ services:
     depends_on:
       - app
       - frontend
-    networks: [webnet]
+    networks:
+      - webnet
 
   redis:
     image: redis:7-alpine
@@ -71,7 +74,10 @@ services:
       retries: 20
     volumes:
       - redis_data:/data
-    networks: [webnet]
+    ports:
+      - "6379:6379"        # Host-Port für lokalen Dev-Server
+    networks:
+      - webnet
 
   postgres:
     image: postgres:16-alpine
@@ -88,10 +94,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    networks: [webnet]
-    # optional: zum lokalen Debuggen
-    # ports:
-    #   - "5432:5432"
+    ports:
+      - "5432:5432"        # optional, für lokale DB-Tools
+    networks:
+      - webnet
 
 networks:
   webnet:
