@@ -26,3 +26,29 @@ export function authenticateToken(req, res, next) {
     res.status(500).json({ error: 'Authentication failed' });
   }
 }
+
+/**
+ * Middleware to check if user is already authenticated
+ * Used for routes that shouldn't be accessed when logged in (e.g., login page)
+ * @param {import('express').Request} req - Express request object
+ * @param {import('express').Response} res - Express response object
+ * @param {import('express').NextFunction} next - Express next middleware function
+ */
+export function isAuthenticated(req, res, next) {
+  const token = req.cookies?.access_token || req.headers.authorization?.split(" ")[1];
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    jwt.verify(token, process.env.JWT_SECRET);
+    return res.status(403).json({
+      message: "Already authenticated."
+    });
+
+  } catch (err) {
+    // token exists but is expired or invalid → user is NOT authenticated
+    return next();
+  }
+}

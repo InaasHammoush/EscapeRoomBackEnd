@@ -1,11 +1,11 @@
 import express from 'express';
 import * as AuthController from '../controllers/auth.controller.js';
-import { authenticateToken } from '../middleware/auth.middleware.js';
+import { authenticateToken, isAuthenticated } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-router.post('/register', AuthController.register);
-router.post('/login', AuthController.login);
+router.post('/register', isAuthenticated, AuthController.register);
+router.post('/login', isAuthenticated, AuthController.login);
 router.post('/logout', authenticateToken, AuthController.logout);
 
 // Email verification
