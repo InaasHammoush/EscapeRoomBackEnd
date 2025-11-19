@@ -3,7 +3,7 @@ import crypto from "crypto";
 import jwt from 'jsonwebtoken';
 import * as userModel from '../models/user.model.js';
 import emailService from '../util/nodemailer.js';
-import { createPasswordResetToken, findTokenHash } from '../models/passwordReset.model.js';
+import * as passwordResetModel from '../models/passwordReset.model.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const REFRESH_SECRET = process.env.REFRESH_SECRET;
@@ -94,7 +94,7 @@ export async function requestPasswordReset(email) {
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + 3600000); // 1 hour expiry
 
-  await createPasswordResetToken(user.id, hashedToken, expiresAt);
+  await passwordResetModel.createPasswordResetToken(user.id, hashedToken, expiresAt);
   await emailService.sendResetPasswordEmail(user.email, token);
 
 } 
@@ -102,7 +102,7 @@ export async function requestPasswordReset(email) {
 export async function resetUserPasswordWithToken(token, newPassword) {
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
-  const result = await findTokenHash(tokenHash);
+  const result = await passwordResetModel.findTokenHash(tokenHash);
   const resetRecord = result.rows[0];
 
   if (!resetRecord) {
@@ -111,6 +111,7 @@ export async function resetUserPasswordWithToken(token, newPassword) {
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   await userModel.updateUserPassword(resetRecord.user_id, hashedPassword);
+  await passwordResetModel.deleteTokenByHash(tokenHash);
 
   const user = await userModel.findUserById(resetRecord.user_id);
 

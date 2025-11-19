@@ -16,3 +16,10 @@ export async function findTokenHash(hashedToken) {
     );
     return result;
 }
+
+export async function deleteTokenByHash(hashedToken) {
+  await db.query(
+    `DELETE FROM password_resets WHERE reset_token = $1`,
+    [hashedToken]   
+  )
+}
