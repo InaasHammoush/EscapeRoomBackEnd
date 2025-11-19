@@ -14,6 +14,6 @@ router.get('/verify-email/:token', AuthController.verifyEmail);
 router.patch('/change-password', authenticateToken, AuthController.changePassword);
 
 router.post('/request-password-reset', isAuthenticated, AuthController.resetPasswordRequest);
-router.post('/reset-password/:token', isAuthenticated, AuthController.resetPassword);
+router.post('/password/reset/:token', isAuthenticated, AuthController.resetPassword);
 
 export default router;
