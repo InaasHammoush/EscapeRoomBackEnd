@@ -122,7 +122,7 @@ const emailService = {
 		try {
 			log.debug(`Sending verification email to ${email}`);
 
-			const verificationLink = `${process.env.FRONTEND_URL}/api/auth/verify-email/${verificationToken}`;
+			const verificationLink = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
 
 			const content = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
