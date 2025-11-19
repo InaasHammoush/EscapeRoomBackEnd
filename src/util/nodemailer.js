@@ -45,19 +45,6 @@ transporter.verify((error) => {
   }
 });
 
-// Wrap in an async IIFE so we can use await.
-(async () => {
-  const info = await transporter.sendMail({
-    from: '"Escaperoom test" <aurelie57@ethereal.email>',
-    to: "bar@example.com, baz@example.com",
-    subject: "testing emails",
-    text: "did you receive this email?", // plain‑text body
-    html: "<b>did you receive this email?</b>", // HTML body
-  });
-
-  log.info("Message sent:", info.messageId);
-})();
-
 /**
  * Email service for sending various types of emails
  */
@@ -69,7 +56,7 @@ transporter.verify((error) => {
  * @property {Function} sendEmail - Core function to send emails with customizable content
  * @property {Function} sendVerificationEmail - Sends account verification emails
  * @property {Function} sendPasswordResetEmail - Sends password reset emails
- * @property {Function} sendChangePasswordEmail - Notifies users about password changes
+ * @property {Function} sendPasswordChangedEmail - Notifies users about password changes
  * @property {Function} sendWelcomeEmail - Sends welcome emails to new users
  *
  * @example
@@ -135,7 +122,7 @@ const emailService = {
 		try {
 			log.debug(`Sending verification email to ${email}`);
 
-			const verificationLink = `${process.env.FRONTEND_URL}/api/auth/verify-email/${verificationToken}`;
+			const verificationLink = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
 
 			const content = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -188,6 +175,80 @@ const emailService = {
 			throw error; // Re-throw to handle in controller
 		}
 	},
+
+	/**
+	 * sends a password changed notification email to a user
+	 * @param {String} email - Recipient email address
+	 * @returns {Promise<Object>} Email send information
+	 * @throws {Error} If email sending fails
+	 * @throws {Error} If required parameters are missing
+	 */
+	async sendPasswordChangedEmail(email) {
+		try{
+			log.debug(`Sending password changed notification email to ${email}`);
+
+			const content = `
+		<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+		  <h2>Password Changed Successfully</h2>
+		  <p>This is a confirmation that the password for your account has just been changed.</p>
+		  <p>If you did not make this change, please contact our support team immediately.</p>
+		  <p>Best regards,<br>The EscapeRoom Team</p>
+		</div>
+	  `;
+
+	  		return await this.sendEmail(email, "Your EscapeRoom Password Has Been Changed", content);
+		}
+		catch (error) {
+			log.error(`Failed to send password changed email to ${email}`, {
+				error: error.message,
+			});
+			throw error; // Re-throw to handle in controller
+		}
+	},
+
+	/**
+	 * Sends a password reset email to a user
+	 * @param {String} email - Recipient email address
+	 * @param {String} resetToken - Password reset token
+	 * @returns {Promise<Object>} Email send information
+	 * @throws {Error} If email sending fails
+	 * @throws {Error} If required parameters are missing
+	 */
+	async sendResetPasswordEmail(email, resetToken) {
+		try {
+			log.debug(`Sending password reset email to ${email}`);
+
+			const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+			const content = `
+		<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Reset Your Password</h2>
+          <p>We received a request to reset your password. Click the button below to create a new password:</p>
+          <p>
+            <a href="${resetLink}" 
+               style="padding: 10px 15px; background-color: #2196F3; color: white; text-decoration: none; border-radius: 4px;">
+              Reset Password
+            </a>
+          </p>
+          <p>If the button doesn't work, you can copy and paste this link into your browser:</p>
+          <p>${resetLink}</p>
+          <p>This link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
+          <p>Best regards,<br>The EscapeRoom Team</p>
+        </div>
+      `;
+			return await this.sendEmail(
+				email,
+				"EscapeRoom Password Reset Request",
+				content,
+			);
+
+		} catch (error) {
+			log.error(`Failed to send password reset email to ${email}`, {
+				error: error.message,
+			});
+			throw error; // Re-throw to handle in controller
+		}
+	}
 };
 
 export default emailService;

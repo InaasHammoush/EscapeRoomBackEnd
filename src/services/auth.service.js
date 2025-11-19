@@ -3,6 +3,7 @@ import crypto from "crypto";
 import jwt from 'jsonwebtoken';
 import * as userModel from '../models/user.model.js';
 import emailService from '../util/nodemailer.js';
+import * as passwordResetModel from '../models/passwordReset.model.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const REFRESH_SECRET = process.env.REFRESH_SECRET;
@@ -34,6 +35,7 @@ export async function loginUser({ email, password }) {
 
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) throw new Error('Invalid credentials');
+  ensureEmailVerified(user);
 
   // Short-lived access token
   const accessToken = jwt.sign(
@@ -68,8 +70,62 @@ export async function verifyEmailToken(token) {
   await emailService.sendWelcomeEmail(user.email);
 }
 
+export async function changeUserPassword(userID, oldPassword, newPassword) {
+  const user = await userModel.findUserById(userID);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const valid = await bcrypt.compare(oldPassword, user.password_hash);
+  if (!valid) {
+    throw new Error("Password incorrect");
+  }
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await userModel.updateUserPassword(userID, hashedPassword);
+  await emailService.sendPasswordChangedEmail(user.email);
+}
+
+export async function requestPasswordReset(email) {
+  const user = await userModel.findUserByEmail(email);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + 3600000); // 1 hour expiry
+
+  await passwordResetModel.createPasswordResetToken(user.id, hashedToken, expiresAt);
+  await emailService.sendResetPasswordEmail(user.email, token);
+
+} 
+
+export async function resetUserPasswordWithToken(token, newPassword) {
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+  const result = await passwordResetModel.findTokenHash(tokenHash);
+  const resetRecord = result.rows[0];
+
+  if (!resetRecord) {
+    throw new Error("invalid or expired token");
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await userModel.updateUserPassword(resetRecord.user_id, hashedPassword);
+  await passwordResetModel.deleteTokenByHash(tokenHash);
+
+  const user = await userModel.findUserById(resetRecord.user_id);
+
+  await emailService.sendPasswordChangedEmail(user.email);
+}
+
 function generateVerificationToken() {
   const token = crypto.randomBytes(32).toString("hex");
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
   return {token, hashedToken};
+}
+
+function ensureEmailVerified(user) {
+  if (!user.email_verified) {
+    throw new Error("Email not verified");
+  }
 }
