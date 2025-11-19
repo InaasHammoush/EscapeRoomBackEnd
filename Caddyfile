@@ -16,6 +16,8 @@
 
   # Alles andere an Frontend
   handle {
+    # React Router fallback
+    try_files {path} /index.html
     reverse_proxy frontend:80
   }
 }
