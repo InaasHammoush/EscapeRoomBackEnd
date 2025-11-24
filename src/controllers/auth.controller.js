@@ -38,3 +38,51 @@ export async function logout(req, res) {
   res.clearCookie('refreshToken');
   res.json({ message: 'Logged out successfully' });
 }
+
+export async function verifyEmail(req, res) {
+  try {
+    const { token } = req.params;
+    await AuthService.verifyEmailToken(token);
+    res.json({ success: true, message: 'Email verified successfully' }); // temporary until the frontend page is ready
+    // res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+}
+
+export async function changePassword(req, res) {
+  try{
+    const userID = req.user.id;
+    const { oldPassword, newPassword } = req.body;
+
+    await AuthService.changeUserPassword(userID, oldPassword, newPassword);
+
+    res.json({ success: true, message: 'Password changed successfully'});
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message});
+  }
+}
+
+export async function resetPasswordRequest(req, res) {
+  try {
+    const { email } = req.body;
+    await AuthService.requestPasswordReset(email);
+    res.json({ success: true, message: 'Password reset email sent if the email is registered'});
+
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message});
+  }
+}
+
+export async function resetPassword(req, res) {
+  try {
+    const { token } = req.params;
+    const { newPassword } = req.body;
+
+    await AuthService.resetUserPasswordWithToken(token, newPassword);
+
+    res.json({ success: true, message: 'Password has been reset successfully'});
+  } catch (err) {
+    res.status(400).json({ success: false, message: err. message});
+  }
+}
