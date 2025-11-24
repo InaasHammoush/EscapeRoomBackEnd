@@ -21,6 +21,7 @@ import tokenRoutes from './routes/token.routes.js';
 import { onSafe, schemas } from './util/validation.js';
 import { RoomManager } from './game/rooms.js';
 import { authenticateToken } from './middleware/auth.js';
+import leaderboardRoutes from './routes/leaderboard.routes.js';
 
 dotenv.config(); // .env einlesen (PORT, ORIGIN, REDIS_URL, ...)
 
@@ -52,6 +53,7 @@ app.get('/version', (_req, res) =>
 // Auth routes (Registration and Login)
 app.use('/api/auth', authRoutes);
 app.use('/api/token', tokenRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
 
 // Kleine Test-Route für Access-Token: gibt den im JWT kodierten User zurück
 app.get('/api/me', authenticateToken, (req, res) => {

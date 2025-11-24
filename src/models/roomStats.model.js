@@ -1,37 +1,39 @@
 // src/models/roomStats.model.js
 // ------------------------------------------------------------
 // Hilfsfunktionen, um Raum- und Teilnehmerdaten in Postgres zu schreiben
-// Nutzt die neue DB-Schicht aus src/config/db.js
+// Nutzt die DB-Schicht aus src/config/db.js
 // ------------------------------------------------------------
 
-import crypto from 'node:crypto';
 import db from '../config/db.js';
 
 /**
  * Raumstart in der Tabelle "rooms" erfassen.
- * Erwartetes Schema (anpassbar):
- *   rooms(id uuid primary key,
- *         created_at timestamptz,
- *         started_at timestamptz,
- *         completed_at timestamptz,
- *         escape_time_seconds integer)
+ *
+ * Schema:
+ *   rooms(
+ *     id uuid primary key,
+ *     room_name varchar(50),
+ *     created_by integer,
+ *     created_at timestamptz default now(),
+ *     started_at timestamptz,
+ *     ended_at timestamptz,
+ *     duration_seconds integer,
+ *     is_completed boolean default false
+ *   )
  */
 export async function recordRoomStarted(room) {
-  const createdAt = room.createdAt ?? Date.now();
   const startedAt = room.startedAt ?? Date.now();
-
-  // Zeit in Sekunden → timestamptz
-  const createdSec = createdAt / 1000;
   const startedSec = startedAt / 1000;
 
+  // created_at hat einen DEFAULT, kann also weggelassen werden
   await db.query(
     `
-    INSERT INTO rooms (id, created_at, started_at)
-    VALUES ($1, to_timestamp($2), to_timestamp($3))
+    INSERT INTO rooms (id, started_at, is_completed)
+    VALUES ($1, to_timestamp($2), false)
     ON CONFLICT (id) DO UPDATE
       SET started_at = EXCLUDED.started_at
     `,
-    [room.id, createdSec, startedSec]
+    [room.id, startedSec]
   );
 }
 
@@ -39,47 +41,40 @@ export async function recordRoomStarted(room) {
  * Raumabschluss in "rooms" aktualisieren (Endzeit + Dauer).
  */
 export async function recordRoomCompleted(room) {
-  if (!room.startedAt || !room.completedAt) {
-    // ohne Start-/Endzeit keine Dauer – dann einfach nur Endzeit setzen
-    const completedSec = (room.completedAt ?? Date.now()) / 1000;
-    await db.query(
-      `
-      UPDATE rooms
-         SET completed_at = to_timestamp($2)
-       WHERE id = $1
-      `,
-      [room.id, completedSec]
-    );
-    return;
-  }
+  const endedAt = room.completedAt ?? Date.now();
+  const endedSec = endedAt / 1000;
 
-  const startedSec = room.startedAt / 1000;
-  const completedSec = room.completedAt / 1000;
-  const escapeSeconds = Math.max(
-    0,
-    Math.round((room.completedAt - room.startedAt) / 1000)
-  );
+  let durationSeconds = null;
+  if (room.startedAt && room.completedAt) {
+    durationSeconds = Math.max(
+      0,
+      Math.round((room.completedAt - room.startedAt) / 1000)
+    );
+  }
 
   await db.query(
     `
     UPDATE rooms
-       SET completed_at = to_timestamp($2),
-           escape_time_seconds = $3
+       SET ended_at = to_timestamp($2),
+           duration_seconds = $3,
+           is_completed = true
      WHERE id = $1
     `,
-    [room.id, completedSec, escapeSeconds]
+    [room.id, endedSec, durationSeconds]
   );
 }
 
 /**
  * Teilnehmer-Datensätze in "room_participants" anlegen.
- * Erwartetes Schema (anpassbar):
+ *
+ * Schema:
  *   room_participants(
- *     id uuid primary key,
+ *     id serial primary key,
  *     room_id uuid references rooms(id),
- *     user_id uuid null,
- *     joined_at timestamptz,
- *     finished_at timestamptz,
+ *     user_id integer references users(id),
+ *     joined_at timestamptz default now(),
+ *     left_at timestamptz,
+ *     completed_at timestamptz,
  *     escape_time_seconds integer
  *   )
  */
@@ -89,9 +84,11 @@ export async function recordParticipantsOnComplete(room) {
   const completedSec = room.completedAt / 1000;
 
   // Für jeden Spieler einen Datensatz schreiben
-  for (const [socketId, player] of room.players) {
-    const joinedAt = player.joinedAt ?? room.startedAt ?? room.createdAt ?? Date.now();
+  for (const [, player] of room.players) {
+    const joinedAt =
+      player.joinedAt ?? room.startedAt ?? room.createdAt ?? Date.now();
     const joinedSec = joinedAt / 1000;
+
     const escapeSeconds = Math.max(
       0,
       Math.round((room.completedAt - joinedAt) / 1000)
@@ -100,16 +97,15 @@ export async function recordParticipantsOnComplete(room) {
     await db.query(
       `
       INSERT INTO room_participants
-        (id, room_id, user_id, joined_at, finished_at, escape_time_seconds)
+        (room_id, user_id, joined_at, completed_at, escape_time_seconds)
       VALUES
-        ($1, $2, $3, to_timestamp($4), to_timestamp($5), $6)
+        ($1, $2, to_timestamp($3), to_timestamp($4), $5)
       `,
       [
-        crypto.randomUUID(),       // id
         room.id,                   // room_id
-        player.profileId ?? null,  // user_id (kann null sein, falls noch kein Account)
+        player.profileId ?? null,  // user_id (int, FK zu users.id) oder null für Gäste
         joinedSec,                 // joined_at
-        completedSec,              // finished_at
+        completedSec,              // completed_at
         escapeSeconds              // escape_time_seconds
       ]
     );
