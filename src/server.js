@@ -20,7 +20,7 @@ import tokenRoutes from './routes/token.routes.js';
 // Eigene Hilfen/Domain-Module
 import { onSafe, schemas } from './util/validation.js';
 import { RoomManager } from './game/rooms.js';
-import { authenticateToken } from './middleware/auth.js';
+import { authenticateToken } from './middleware/auth.middleware.js';
 import leaderboardRoutes from './routes/leaderboard.routes.js';
 
 dotenv.config(); // .env einlesen (PORT, ORIGIN, REDIS_URL, ...)
