@@ -1,4 +1,4 @@
-export const roomImages = {
+export const roomImagesMapper = {
   wizard_library: {
     0: '/rooms/wizard_library/north.png',
     1: '/rooms/wizard_library/east.png',
