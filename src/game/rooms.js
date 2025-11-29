@@ -51,6 +51,12 @@ export class RoomManager {
   /** Neuen Raum erzeugen (unstarted, leere Spielerliste, initialer Puzzle-State) */
   createRoom(roomName = "default") {
     const id = crypto.randomUUID();
+    // Helper to extract the array of image file paths from the mapper object
+    const getRoomViews = (roomName) => {
+      const viewsMap = roomImagesMapper[roomName] || roomImagesMapper.default;
+      // We only need the VALUES (the file paths) from the object {0: path1, 1: path2, ...}
+      return Object.values(viewsMap);
+    };
     const room = {
       id,
       roomName,
@@ -66,7 +72,8 @@ export class RoomManager {
         public: {
           ...Puzzles.initAll().public,
           viewIndex: 0, // 0=N, 1=E, 2=S, 3=W
-          views: roomImagesMapper[roomName] ?? roomImages.default
+          roomType: roomName, // for client to pick images
+          views: getRoomViews(roomName)
         },
         internal: Puzzles.initAll().internal
       }
