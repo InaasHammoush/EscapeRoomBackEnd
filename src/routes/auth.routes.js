@@ -16,4 +16,6 @@ router.patch('/change-password', authenticateToken, AuthController.changePasswor
 router.post('/request-password-reset', isAuthenticated, AuthController.resetPasswordRequest);
 router.post('/password/reset/:token', isAuthenticated, AuthController.resetPassword);
 
+router.patch('/change-email', authenticateToken, AuthController.changeEmailAddress);
+
 export default router;

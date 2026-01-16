@@ -23,7 +23,7 @@ export async function findUserByToken(hashedToken) {
   return result.rows[0];
 }
 
-export async function verifyUserEmail(userId) {
+export async function completeEmailVerification(userId) {
   await db.query(
     `UPDATE users SET email_verified = TRUE, email_verification_token = NULL, email_verification_expires = NULL WHERE id = $1`,
     [userId]
@@ -42,5 +42,12 @@ export async function updateUserPassword(userID, newPasswordHash) {
   await db.query(
     `UPDATE users SET password_hash = $1 WHERE id = $2`,
     [newPasswordHash, userID]
+  );
+}
+
+export async function updateUserEmail(userId, newEmail, emailVerificationToken, tokenExpiresAt) {
+  await db.query(
+    `UPDATE users SET email = $1, email_verified = FALSE, email_verification_token = $2, email_verification_expires = $3 WHERE id = $4`,
+    [newEmail, emailVerificationToken, tokenExpiresAt, userId]
   );
 }

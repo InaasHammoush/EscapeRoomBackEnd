@@ -1,5 +1,5 @@
 import * as AuthService from '../services/auth.service.js';
-import { registerSchema, loginSchema } from '../util/validation.js';
+import { registerSchema, loginSchema, changeEmailSchema } from '../util/validation.js';
 
 export async function register(req, res) {
   try {
@@ -43,8 +43,7 @@ export async function verifyEmail(req, res) {
   try {
     const { token } = req.params;
     await AuthService.verifyEmailToken(token);
-    res.json({ success: true, message: 'Email verified successfully' }); // temporary until the frontend page is ready
-    // res.redirect(`${process.env.FRONTEND_URL}/email-verified`);
+    res.json({ success: true, message: 'Email verified successfully' }); 
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -84,5 +83,21 @@ export async function resetPassword(req, res) {
     res.json({ success: true, message: 'Password has been reset successfully'});
   } catch (err) {
     res.status(400).json({ success: false, message: err. message});
+  }
+}
+
+export async function changeEmailAddress(req, res) {
+  try {
+    // input validation
+    changeEmailSchema.parse(req.body);
+
+    const userID = req.user.id;
+    const { newEmail} = req.body;
+
+    await AuthService.changeUserEmailAddress(userID, newEmail);
+    res.json({ success: true, message: 'Email change initiated. Please verify your new email address.'});
+
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message});
   }
 }
