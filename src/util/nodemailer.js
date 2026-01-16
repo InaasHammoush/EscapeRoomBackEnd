@@ -248,7 +248,54 @@ const emailService = {
 			});
 			throw error; // Re-throw to handle in controller
 		}
+	},
+
+	async sendAccountDeletionEmail(email) {
+		try {
+			log.debug(`Sending account deletion email to ${email}`);
+			const content = `
+		<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+		  <h2>Account Deletion Confirmation</h2>
+		  <p>Your account has been successfully deleted from EscapeRoom.</p>
+		  <p>We're sorry to see you go. If you change your mind, you have 30 days to recover your account. after that you're always welcome to register again.</p>
+		  <p>To recover your account please click <a href="${process.env.FRONTEND_URL}/recover-account">here</a>.</p> 
+		  <p>Thank you for being a part of our community.</p> 
+		  <p>If you have any questions or concerns, please contact our support team.</p>
+		  <p>Best regards,<br>The EscapeRoom Team</p>
+		</div>
+	  `;
+
+			return await this.sendEmail(email, "Account Deletion Confirmation", content);
+		} catch (error) {
+			log.error(`Failed to send account deletion email to ${email}`, {
+				error: error.message,
+			});
+			throw error; // Re-throw to handle in controller
+		}
+	},
+
+	async sendAccountRecoveryEmail(email) {
+		try {
+			log.debug(`Sending account recovery email to ${email}`);
+			const content = `
+		<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+		  <h2>Account Recovery Successful</h2>
+		  <p>Your EscapeRoom account has been successfully recovered.</p>
+		  <p>You can now log in using your previous credentials.</p>
+		  <p>If you have any questions or need assistance, please contact our support team.</p>
+		  <p>Best regards,<br>The EscapeRoom Team</p>
+		</div>
+	  `;
+
+	  		return await this.sendEmail(email, "Account Deletion Confirmation", content);
+		} catch (error) {
+			log.error(`Failed to send account deletion email to ${email}`, {
+				error: error.message,
+			});
+			throw error; // Re-throw to handle in controller
+		}
 	}
+
 };
 
 export default emailService;

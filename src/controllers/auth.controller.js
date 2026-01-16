@@ -1,5 +1,5 @@
 import * as AuthService from '../services/auth.service.js';
-import { registerSchema, loginSchema, changeEmailSchema } from '../util/validation.js';
+import { registerSchema, loginSchema, emailSchema } from '../util/validation.js';
 
 export async function register(req, res) {
   try {
@@ -89,7 +89,7 @@ export async function resetPassword(req, res) {
 export async function changeEmailAddress(req, res) {
   try {
     // input validation
-    changeEmailSchema.parse(req.body);
+    emailSchema.parse(req.body);
 
     const userID = req.user.id;
     const { newEmail} = req.body;
@@ -97,6 +97,29 @@ export async function changeEmailAddress(req, res) {
     await AuthService.changeUserEmailAddress(userID, newEmail);
     res.json({ success: true, message: 'Email change initiated. Please verify your new email address.'});
 
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message});
+  }
+}
+
+export async function deleteAccount(req, res) {
+  try {
+    const userID = req.user.id;
+    await AuthService.softDeleteUserAccount(userID);
+    res.json({ success: true, message: 'Account deleted successfully'});
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message});
+  }
+}
+
+export async function recoverAccount(req, res) {
+  try {
+    // input validation
+    emailSchema.parse(req.body);
+    
+    const { email } = req.body;
+    await AuthService.recoverDeletedUserAccount(email);
+    res.json({ success: true, message: 'Account recovery successful. You can now log in.'});
   } catch (err) {
     res.status(400).json({ success: false, message: err.message});
   }

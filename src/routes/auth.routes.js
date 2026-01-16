@@ -18,4 +18,8 @@ router.post('/password/reset/:token', isAuthenticated, AuthController.resetPassw
 
 router.patch('/change-email', authenticateToken, AuthController.changeEmailAddress);
 
+router.delete('/delete-account', authenticateToken, AuthController.deleteAccount);
+
+router.patch('/recover-account', isAuthenticated, AuthController.recoverAccount);
+
 export default router;

@@ -10,7 +10,7 @@ export async function createUser(username, email, passwordHash, emailVerificatio
 }
 
 export async function findUserByEmail(email) {
-  const result = await db.query(`SELECT * FROM users WHERE email = $1`, [email]);
+  const result = await db.query(`SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL`, [email]);
   return result.rows[0];
 }
 
@@ -49,5 +49,19 @@ export async function updateUserEmail(userId, newEmail, emailVerificationToken, 
   await db.query(
     `UPDATE users SET email = $1, email_verified = FALSE, email_verification_token = $2, email_verification_expires = $3 WHERE id = $4`,
     [newEmail, emailVerificationToken, tokenExpiresAt, userId]
+  );
+}
+
+export async function softDeleteUserById(userID) {
+  await db.query(
+    `UPDATE users SET deleted_at = NOW() WHERE id = $1`,
+    [userID]
+  );
+}
+
+export async function recoverDeletedUserByEmail(email) {
+  await db.query(
+    `UPDATE users SET deleted_at = NULL WHERE email = $1`,
+    [email]
   );
 }

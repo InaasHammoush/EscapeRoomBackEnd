@@ -34,7 +34,7 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-export const changeEmailSchema = z.object({
+export const emailSchema = z.object({
   newEmail: z.email(),
 })
 
