@@ -5,7 +5,7 @@ services:
     build: .
     image: escaperoom-backend:latest
     restart: unless-stopped
-    env_file: .env.docker
+    env_file: .env
     environment:
       PORT: ${PORT:-3000}
       ORIGIN: ${ORIGIN:-http://localhost}
@@ -25,7 +25,7 @@ services:
     image: escaperoom-backend:latest
     command: ["node", "src/worker/scoreWorker.js"]
     restart: unless-stopped
-    env_file: .env.docker
+    env_file: .env
     environment:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/escape}
