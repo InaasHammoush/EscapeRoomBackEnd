@@ -16,4 +16,10 @@ router.patch('/change-password', authenticateToken, AuthController.changePasswor
 router.post('/request-password-reset', isAuthenticated, AuthController.resetPasswordRequest);
 router.post('/password/reset/:token', isAuthenticated, AuthController.resetPassword);
 
+router.patch('/change-email', authenticateToken, AuthController.changeEmailAddress);
+
+router.delete('/delete-account', authenticateToken, AuthController.deleteAccount);
+
+router.patch('/recover-account', isAuthenticated, AuthController.recoverAccount);
+
 export default router;
