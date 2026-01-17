@@ -1,6 +1,7 @@
 # Node
 node_modules/
 .env
+.env.docker
 dist/
 coverage/
 npm-debug.log*
@@ -8,6 +9,8 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 certs/
+*.log
+*-audit.json
 
 # IDE
 .vscode/

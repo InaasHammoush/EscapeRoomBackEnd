@@ -1,6 +1,18 @@
 // src/util/validation.js
 import { z } from 'zod';
 
+const passwordSchema = z
+  .string()
+  .min(8, 'Passwort muss mindestens 8 Zeichen lang sein')
+  .max(100, 'Passwort darf maximal 100 Zeichen lang sein')
+  .regex(/[A-Z]/, 'Passwort muss mindestens einen Großbuchstaben enthalten')
+  .regex(/[a-z]/, 'Passwort muss mindestens einen Kleinbuchstaben enthalten')
+  .regex(/[0-9]/, 'Passwort muss mindestens eine Ziffer enthalten')
+  .regex(
+    /[^A-Za-z0-9]/,
+    'Passwort muss mindestens ein Sonderzeichen enthalten'
+  );
+
 export const schemas = {
   CreateRoom: z.object({
     roomName: z.string().min(1).max(32)
@@ -30,14 +42,23 @@ export const schemas = {
 };
 
 export const registerSchema = z.object({
-  username: z.string().min(3),
-  email: z.email(),
-  password: z.string().min(8),
+  username: z
+    .string()
+    .min(3, 'Benutzername muss mindestens 3 Zeichen lang sein')
+    .max(50, 'Benutzername darf maximal 50 Zeichen lang sein'),
+  email: z
+    .string()
+    .email('Bitte eine gültige E-Mail-Adresse angeben'),
+  password: passwordSchema,
 });
 
 export const loginSchema = z.object({
-  email: z.email(),
-  password: z.string().min(1),
+  email: z
+    .string()
+    .email('Bitte eine gültige E-Mail-Adresse angeben'),
+  password: z
+    .string()
+    .min(1, 'Passwort darf nicht leer sein'),
 });
 
 export const changeEmailSchema = z.object({

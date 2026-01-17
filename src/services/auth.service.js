@@ -1,3 +1,4 @@
+// src/services/auth.service.js
 import bcrypt from 'bcryptjs';
 import crypto from "crypto";
 import jwt from 'jsonwebtoken';
@@ -7,6 +8,10 @@ import * as passwordResetModel from '../models/passwordReset.model.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const REFRESH_SECRET = process.env.REFRESH_SECRET;
+
+if (!JWT_SECRET || !REFRESH_SECRET) {
+  console.warn('⚠️ JWT_SECRET or REFRESH_SECRET is not set – auth will not work correctly.');
+}
 
 export async function registerUser({ username, email, password }) {
   const existing = await userModel.findUserByEmail(email);
@@ -44,9 +49,9 @@ export async function loginUser({ email, password }) {
     { algorithm: 'HS256', expiresIn: '15m' }
   );
 
-  // Long-lived refresh token
+  // Long-lived refresh token (enthält jetzt auch username)
   const refreshToken = jwt.sign(
-    { id: user.id },
+    { id: user.id, username: user.username },
     REFRESH_SECRET,
     { algorithm: 'HS256', expiresIn: '7d' }
   );

@@ -11,6 +11,7 @@
 import crypto from 'node:crypto';
 import * as Puzzles from './puzzles/index.js';
 import { enqueueScoreEvent } from '../infra/outbox.js'; // optional – nur genutzt, wenn Redis existiert
+import * as RoomStats from '../models/roomStats.model.js';
 import { roomImagesMapper} from '../data/roomImagesMapper.js';
 
 export class RoomManager {
@@ -113,18 +114,28 @@ export class RoomManager {
   }
 
   /** Spieler beitreten lassen (mit optionaler Profil-ID) */
-  async joinRoom(id, socketId, name = 'Player', profileId = null) {
-    if (!this.rooms.has(id) && this.redis) {
-      await this.loadSnapshot(id);
-    }
-    const room = this.get(id);
-    if (!room) throw new Error('ROOM_NOT_FOUND');
-    room.players.set(socketId, { name: String(name), ready: false, profileId: profileId || null });
-    this._touchSeq(room); // optionaler Seq-Inkrement bei Join (macht Deltas eindeutiger)
-    this._saveSnapshot(id).catch(() => {});
-    this._persistLocal(id);
-    return room;
+async joinRoom(id, socketId, name = 'Player', profileId = null) {
+  if (!this.rooms.has(id) && this.redis) {
+    await this.loadSnapshot(id);
   }
+  const room = this.get(id);
+  if (!room) throw new Error('ROOM_NOT_FOUND');
+
+  const now = Date.now();
+
+  room.players.set(socketId, {
+    name: String(name),
+    ready: false,
+    profileId: profileId || null,
+    joinedAt: now           // NEU: Join-Zeit für Stats
+  });
+
+  this._touchSeq(room);
+  this._saveSnapshot(id).catch(() => {});
+  this._persistLocal(id);
+
+  return room;
+}
 
   /** Spieler mit gegebener Socket-ID aus allen Räumen entfernen (Disconnect) */
   leaveBySocket(socketId) {
@@ -160,18 +171,24 @@ export class RoomManager {
   }
 
   /** Spiel starten (einmalig) */
-  start(id) {
-    const room = this.get(id);
-    if (!room) throw new Error('ROOM_NOT_FOUND');
-    if (!room.started) {
-      room.started = true;
-      room.startedAt = Date.now();
-      this._touchSeq(room);
-      this._saveSnapshot(id).catch(() => {});
-      this._persistLocal(id);
-    }
-    return room;
+start(id) {
+  const room = this.get(id);
+  if (!room) throw new Error('ROOM_NOT_FOUND');
+
+  if (!room.started) {
+    room.started = true;
+    room.startedAt = Date.now();
+    this._touchSeq(room);
+    this._saveSnapshot(id).catch(() => {});
+    this._persistLocal(id);
+
+    // Nicht-blockierend in die DB schreiben
+    RoomStats.recordRoomStarted(room).catch((err) => {
+      console.error('recordRoomStarted failed:', err);
+    });
   }
+  return room;
+}
 
   applyViewRotation(id, { direction }) {
     const room = this.get(id);
@@ -306,18 +323,31 @@ export class RoomManager {
     }
   }
 
-  /** Prüft Abschlussbedingung und vergibt optional Punkte */
-  async _maybeMarkCompleted(room) {
-    if (room.completed) return;
+async _maybeMarkCompleted(room) {
+  if (room.completed) return;
 
-    if (this.completionPredicate(room.state)) {
-      room.completed = true;
-      room.completedAt = Date.now();
-      this._touchSeq(room);
+  if (this.completionPredicate(room.state)) {
+    room.completed = true;
+    room.completedAt = Date.now();
+    this._touchSeq(room);
+    await this._saveSnapshot(room.id);
+    this._persistLocal(room.id);
 
-      // Finaler Snapshot
-      await this._saveSnapshot(room.id);
-      this._persistLocal(room.id);
+    // finishedAt pro Spieler setzen
+    for (const player of room.players.values()) {
+      if (!player.finishedAt) {
+        player.finishedAt = room.completedAt;
+      }
+    }
+
+    // Raum- und Teilnehmer-Stats in die DB schreiben (nicht-blockierend)
+    RoomStats.recordRoomCompleted(room).catch((err) => {
+      console.error('recordRoomCompleted failed:', err);
+    });
+
+    RoomStats.recordParticipantsOnComplete(room).catch((err) => {
+      console.error('recordParticipantsOnComplete failed:', err);
+    });
 
       // Optional: Punktevergabe via Outbox (Redis Stream) – asynchron
       if (this.awardOnComplete && this.redis) {
