@@ -1,5 +1,5 @@
 import * as AuthService from '../services/auth.service.js';
-import { registerSchema, loginSchema, emailSchema } from '../util/validation.js';
+import { registerSchema, loginSchema, changeEmailSchema, emailSchema } from '../util/validation.js';
 
 export async function register(req, res) {
   try {
@@ -89,7 +89,7 @@ export async function resetPassword(req, res) {
 export async function changeEmailAddress(req, res) {
   try {
     // input validation
-    emailSchema.parse(req.body);
+    changeEmailSchema.parse(req.body);
 
     const userID = req.user.id;
     const { newEmail} = req.body;
@@ -116,7 +116,7 @@ export async function recoverAccount(req, res) {
   try {
     // input validation
     emailSchema.parse(req.body);
-    
+
     const { email } = req.body;
     await AuthService.recoverDeletedUserAccount(email);
     res.json({ success: true, message: 'Account recovery successful. You can now log in.'});

@@ -59,6 +59,14 @@ export async function softDeleteUserById(userID) {
   );
 }
 
+export async function findDeletedUserByEmail(email) {
+  const result = await db.query(
+    `SELECT * FROM users WHERE email = $1 AND deleted_at IS NOT NULL`,
+  [email]
+  );
+  return result.rows[0];
+}
+
 export async function recoverDeletedUserByEmail(email) {
   await db.query(
     `UPDATE users SET deleted_at = NULL WHERE email = $1`,

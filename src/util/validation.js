@@ -34,9 +34,13 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-export const emailSchema = z.object({
+export const changeEmailSchema = z.object({
   newEmail: z.email(),
-})
+});
+
+export const emailSchema = z.object({
+  email: z.email(),
+});
 
 /**
  * Wrappt socket.on(...) mit Payload-Validierung & Fehlerbehandlung

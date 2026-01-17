@@ -151,18 +151,15 @@ export async function softDeleteUserAccount(userID) {
 } 
 
 export async function recoverDeletedUserAccount(email) {
-  const user = await userModel.findUserByEmail(email);
+  const user = await userModel.findDeletedUserByEmail(email);
   if (!user) {
     throw new Error("User not found");
-  }
-  if (!user.deleted_at) {
-    throw new Error("Account is not deleted");
   }
   if (new Date() - new Date(user.deleted_at) > 30 * 24 * 3600000) {
     throw new Error("Account recovery period exceeded");
   }
 
-  await userModel.recoverUserAccountByEmail(email);
+  await userModel.recoverDeletedUserByEmail(email);
   await emailService.sendAccountRecoveryEmail(email);
 }
 
