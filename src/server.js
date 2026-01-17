@@ -108,8 +108,8 @@ io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
   // Raum anlegen
-  onSafe(socket, 'create_room', schemas.CreateRoom, async (_data, cb) => {
-    const room = rooms.createRoom();
+  onSafe(socket, 'create_room', schemas.CreateRoom, async ({ roomName }, cb) => {
+    const room = rooms.createRoom(roomName);
     cb?.({ ok: true, roomId: room.id });
   });
 
@@ -120,8 +120,10 @@ io.on('connection', (socket) => {
       socket.join(roomId);
       // Lobby-Status an alle im Raum
       io.to(roomId).emit('lobby_update', rooms.publicRoom(roomId));
+      const snapshot = rooms.snapshot(roomId);
+      console.log("✅ SNAPSHOT DATA SENT:", snapshot.state.views);
       // eigenen Snapshot an den neuen Client
-      cb?.({ ok: true, snapshot: rooms.snapshot(roomId) });
+      cb?.({ ok: true, snapshot });
     } catch (e) {
       cb?.({ ok: false, error: e.message || 'ROOM_JOIN_FAILED' });
     }
@@ -140,6 +142,19 @@ io.on('connection', (socket) => {
     } catch (e) {
       cb?.({ ok: false, error: e.message || 'READY_FAILED' });
     }
+  });
+
+  onSafe(socket, 'intent:turn', schemas.Turn, async ( payload, cb) => {
+    const { roomId, direction } = payload; // Destructure the full validated payload
+    const result = rooms.applyViewRotation(roomId, { direction }); // Pass direction inside an object
+    if (!result.ok) return cb?.(result);
+    // Broadcast delta to everyone in the room
+    io.to(roomId).emit('state:viewChanged', {
+      seq: result.seq,
+      viewIndex: result.diff.viewIndex
+    });
+
+    cb?.({ ok: true, seq: result.seq });
   });
 
   // Chat-Nachricht (einfaches Beispiel)
