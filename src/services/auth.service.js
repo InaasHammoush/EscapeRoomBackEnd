@@ -71,7 +71,7 @@ export async function verifyEmailToken(token) {
     throw new Error("invalid or expired token");
   }
 
-  await userModel.verifyUserEmail(user.id);
+  await userModel.completeEmailVerification(user.id);
   await emailService.sendWelcomeEmail(user.email);
 }
 
@@ -121,6 +121,51 @@ export async function resetUserPasswordWithToken(token, newPassword) {
   const user = await userModel.findUserById(resetRecord.user_id);
 
   await emailService.sendPasswordChangedEmail(user.email);
+}
+
+export async function changeUserEmailAddress(userID, newEmail) {
+  const existing = await userModel.findUserById(userID);
+  if (!existing) {
+    throw new Error("user not found")
+  }
+
+  const emailExists = await userModel.findUserByEmail(newEmail);
+  if (emailExists) {
+    throw new Error("email already exists");
+  }
+
+  const {token, hashedToken} = generateVerificationToken();
+
+  await userModel.updateUserEmail(
+    userID,
+    newEmail,
+    hashedToken,
+    new Date(Date.now() + 3600000 * 24) // 24 hours expiry for token
+  )
+  await emailService.sendVerificationEmail(newEmail, token);
+  
+}
+
+export async function softDeleteUserAccount(userID) {
+  const user = await userModel.findUserById(userID);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  await userModel.softDeleteUserById(userID);
+  await emailService.sendAccountDeletionEmail(user.email);
+} 
+
+export async function recoverDeletedUserAccount(email) {
+  const user = await userModel.findDeletedUserByEmail(email);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  if (new Date() - new Date(user.deleted_at) > 30 * 24 * 3600000) {
+    throw new Error("Account recovery period exceeded");
+  }
+
+  await userModel.recoverDeletedUserByEmail(email);
+  await emailService.sendAccountRecoveryEmail(email);
 }
 
 function generateVerificationToken() {

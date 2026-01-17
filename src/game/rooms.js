@@ -12,6 +12,8 @@ import crypto from 'node:crypto';
 import * as Puzzles from './puzzles/index.js';
 import { enqueueScoreEvent } from '../infra/outbox.js'; // optional – nur genutzt, wenn Redis existiert
 import * as RoomStats from '../models/roomStats.model.js';
+import { roomImagesMapper} from '../data/roomImagesMapper.js';
+
 export class RoomManager {
   /**
    * @param {Object} opts
@@ -48,10 +50,17 @@ export class RoomManager {
   // ----------------------------------------------------------
 
   /** Neuen Raum erzeugen (unstarted, leere Spielerliste, initialer Puzzle-State) */
-  createRoom() {
+  createRoom(roomName = "default") {
     const id = crypto.randomUUID();
+    // Helper to extract the array of image file paths from the mapper object
+    const getRoomViews = (roomName) => {
+      const viewsMap = roomImagesMapper[roomName] || roomImagesMapper.default;
+      // We only need the VALUES (the file paths) from the object {0: path1, 1: path2, ...}
+      return Object.values(viewsMap);
+    };
     const room = {
       id,
+      roomName,
       epoch: Date.now(),
       seq: 0,
       started: false,
@@ -60,7 +69,15 @@ export class RoomManager {
       startedAt: null,
       completedAt: null,
       players: new Map(), // socketId -> { name, ready, profileId? }
-      state: Puzzles.initAll(), // { public, internal }
+      state: {
+        public: {
+          ...Puzzles.initAll().public,
+          viewIndex: 0, // 0=N, 1=E, 2=S, 3=W
+          roomType: roomName, // for client to pick images
+          views: getRoomViews(roomName)
+        },
+        internal: Puzzles.initAll().internal
+      }
     };
     this.rooms.set(id, room);
     // Bei Anlage sofort einen Snapshot persistieren (nicht kritisch, aber praktisch)
@@ -170,9 +187,29 @@ start(id) {
       console.error('recordRoomStarted failed:', err);
     });
   }
-
   return room;
 }
+
+  applyViewRotation(id, { direction }) {
+    const room = this.get(id);
+    if (!room) return { ok: false, error: 'ROOM_NOT_FOUND' };
+    if (!room.started) return { ok: false, error: 'ROOM_NOT_RUNNING' };
+
+    const pub = room.state.public;
+    if (direction === 'LEFT') {
+      pub.viewIndex = (pub.viewIndex + 3) % 4;
+    } else if (direction === 'RIGHT') {
+      pub.viewIndex = (pub.viewIndex + 1) % 4;
+    } else {
+      return { ok: false, error: 'INVALID_DIRECTION' };
+    }
+
+    this._touchSeq(room);
+    this._saveSnapshot(id).catch(() => {});
+    this._persistLocal(id);
+
+    return { ok: true, seq: room.seq, diff: { viewIndex: pub.viewIndex } };
+  }
 
   /**
    * Hauptmutation: Aktion anwenden (delegiert an Puzzle-Engine).

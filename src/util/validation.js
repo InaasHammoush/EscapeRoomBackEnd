@@ -14,7 +14,9 @@ const passwordSchema = z
   );
 
 export const schemas = {
-  CreateRoom: z.any().optional(), // keine Payload erforderlich
+  CreateRoom: z.object({
+    roomName: z.string().min(1).max(32)
+  }),
   JoinRoom: z.object({
     roomId: z.string().uuid(),
     name: z.string().min(1).max(32)
@@ -32,6 +34,10 @@ export const schemas = {
     objectId: z.string().min(1), // z. B. "switch:A"
     verb: z.string().min(1),     // z. B. "toggle"
     data: z.record(z.any()).optional()
+  }),
+  Turn: z.object({
+    roomId: z.uuid(),
+    direction: z.enum(['LEFT','RIGHT'])
   })
 };
 
@@ -53,6 +59,14 @@ export const loginSchema = z.object({
   password: z
     .string()
     .min(1, 'Passwort darf nicht leer sein'),
+});
+
+export const changeEmailSchema = z.object({
+  newEmail: z.email(),
+});
+
+export const emailSchema = z.object({
+  email: z.email(),
 });
 
 /**
