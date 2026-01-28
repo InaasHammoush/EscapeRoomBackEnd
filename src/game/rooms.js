@@ -206,6 +206,7 @@ export class RoomManager {
     if (!room.started) return { ok: false, error: 'ROOM_NOT_RUNNING' };
     if (room.completed) return { ok: false, error: 'ROOM_ALREADY_COMPLETED' };
 
+    console.log("Applying action in room", id, action);
     // Delegation an Puzzle-Engine (deterministisch)
     const res = Puzzles.apply(room.state, action);
     if (!res.ok) return { ok: false, error: res.error || 'INVALID_ACTION' };

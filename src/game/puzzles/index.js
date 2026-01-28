@@ -22,7 +22,39 @@ export function initAll() {
 export function apply(state, action) {
   const now = Date.now();
 
-  // Dispatch über objectId-Präfix
+  // Dispatch über objectId
+  if (action.objectId === 'test_box_01'){
+    console.log("Test Box 1 was interacted with!", action);
+    return {
+      ok: true,
+      nextState: state, // No actual state change yet, just a UI trigger
+      diff: {
+        test_box_01: {
+          showWidget: "keypad" // e.g., "keypad", "letter_safe", or null to close
+        }
+      }
+    };
+  }
+
+  if (action.objectId === 'keypad' && action.verb === 'SUBMIT') {
+    const submittedCode = action.data?.code;
+
+    if (submittedCode === "1234") {
+      console.log("🔓 Correct code entered!");
+      
+      // We clone the state to keep it immutable as per FSM principles 
+      const nextState = JSON.parse(JSON.stringify(state)); 
+
+      return {
+        ok: true,
+        nextState,
+        diff: { 
+          activeWidget: null, 
+        }
+      };
+    }
+}
+
   if (action.objectId?.startsWith('switch:')) {
     const res = Coop.apply(state.internal.coopSwitches, action, now);
     if (!res.ok) return res;
