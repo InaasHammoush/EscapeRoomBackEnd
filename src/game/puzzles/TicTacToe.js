@@ -44,21 +44,25 @@ export function apply(state, action) {
     } else if (winner === "O") {
         score.ghost++;
         message = getRandom(TAUNTS.GHOST_WIN_ROUND);
+    } else {
+        message = "A stalemate... for now.";
     }
 
+    // ✅ CRITICAL: Check if the match is decided (First to 3)
     if (score.player >= 3) {
-      completed = true;
-      message = "The scroll shrivels... the path is open.";
+        completed = true;
+        message = "The scroll shrivels... the path is open.";
     } else if (score.ghost >= 3) {
-      // THE GHOSTLY RESET: Match lost
-      message = getRandom(TAUNTS.MATCH_LOSS);
-      score = { player: 0, ghost: 0 }; // Reset the score
-      round = 1;                      // Reset rounds
-      board = Array(9).fill(null);    // Clear board
-      // Note: completed remains false so they can try again immediately
+        // Ghost wins match: Reset the nightmare
+        message = getRandom(TAUNTS.MATCH_LOSS);
+        score = { player: 0, ghost: 0 }; 
+        round = 1;
+        board = Array(9).fill(null);
+        completed = false; // Player must start over
     } else {
-      board = Array(9).fill(null);
-      round++;
+        // Match continues to next round
+        board = Array(9).fill(null);
+        round++;
     }
   }
 
@@ -72,19 +76,43 @@ export function apply(state, action) {
 
   function calculateSmartMove(board) {
     const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-    const findTrigger = (m) => {
-      for (let l of lines) {
-        const v = l.map(i => board[i]);
-        if (v.filter(x => x === m).length === 2 && v.filter(x => x === null).length === 1) {
-          return l[v.indexOf(null)];
+    
+    const findTrigger = (mark) => {
+        const potentialMoves = [];
+        for (let l of lines) {
+            const v = l.map(i => board[i]);
+            if (v.filter(x => x === mark).length === 2 && v.filter(x => x === null).length === 1) {
+                potentialMoves.push(l[v.indexOf(null)]);
+            }
         }
-      }
-      return null;
+        return potentialMoves.length > 0 ? potentialMoves : null;
     };
-    const win = findTrigger("O"); if (win !== null) return win;
-    const block = findTrigger("X"); if (block !== null) return block;
-    if (board[4] === null) return 4;
-    return board.indexOf(null);
+
+    // 1. Priority: Can Ghost win? (Pick a random winning move if multiple exist)
+    const winMoves = findTrigger("O");
+    if (winMoves) return winMoves[Math.floor(Math.random() * winMoves.length)];
+
+    // 2. Priority: Must Ghost block Player?
+    const blockMoves = findTrigger("X");
+    if (blockMoves) return blockMoves[Math.floor(Math.random() * blockMoves.length)];
+
+    // 3. Strategic: Weighted Randomness
+    // High weight for Center (4), Medium for Corners (0,2,6,8), Low for Edges
+    const center = [4];
+    const corners = [0, 2, 6, 8];
+    const edges = [1, 3, 5, 7];
+
+    const available = (list) => list.filter(i => board[i] === null);
+
+    // 70% chance to pick Center/Corners if available, 30% to be "absent-minded"
+    if (Math.random() > 0.3) {
+      const bestChoices = [...available(center), ...available(corners)];
+      if (bestChoices.length > 0) return bestChoices[Math.floor(Math.random() * bestChoices.length)];
+    }
+
+    // Fallback: Pick any remaining empty spot randomly
+    const allAvailable = board.map((v, i) => v === null ? i : null).filter(v => v !== null);
+    return allAvailable[Math.floor(Math.random() * allAvailable.length)];
   }
 
   const nextGridState = { 
