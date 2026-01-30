@@ -1,17 +1,21 @@
 // Zentraler Dispatcher: initAll() baut Gesamtzustand; apply() leitet an das richtige Puzzle weiter
-import * as Coop from './coopSwitches.js';
-import * as Lights from './lightsOut.js';
+import * as TicTacToe from './TicTacToe.js';
 import { makeResult } from './fsm.js';
 
 export function initAll() {
   return {
     public: {
-      coopSwitches: Coop.exportPublic(Coop.init()),  // placeholder; wir speichern parallel
-      lightsOut:    Lights.exportPublic(Lights.init())
+      scroll_grid: {
+        board: Array(9).fill(null),
+        score: { player: 0, ghost: 0 },
+        round: 1,
+        completed: false,
+        message: "Care for a game, mortal?"
+      }
     },
     internal: {
-      coopSwitches: Coop.init(),
-      lightsOut:    Lights.init()
+      // Track processed actionIds to prevent double-spending/lag-cheating
+      processedActions: new Set(), 
     }
   };
 }
@@ -19,73 +23,43 @@ export function initAll() {
 /**
  * action = { actionId, playerId, objectId, verb, data }
  */
-export function apply(state, action) {
-  const now = Date.now();
+// server/src/puzzles/index.js
 
-  // Dispatch über objectId
-  if (action.objectId === 'test_box_01'){
-    console.log("Test Box 1 was interacted with!", action);
+export function apply(state, action) {
+  // 1. Logic for opening the widget
+  if (action.objectId === 'test_box_01') {
     return {
       ok: true,
-      nextState: state, // No actual state change yet, just a UI trigger
+      nextState: state, // Since we just trigger a UI change, state remains same
       diff: {
-        test_box_01: {
-          showWidget: "keypad" // e.g., "keypad", "letter_safe", or null to close
-        }
+        test_box_01: { showWidget: "scroll_grid" }
       }
     };
   }
 
-  if (action.objectId === 'keypad' && action.verb === 'SUBMIT') {
-    const submittedCode = action.data?.code;
-
-    if (submittedCode === "1234") {
-      console.log("🔓 Correct code entered!");
-      
-      // We clone the state to keep it immutable as per FSM principles 
-      const nextState = JSON.parse(JSON.stringify(state)); 
-
-      return {
-        ok: true,
-        nextState,
-        diff: { 
-          activeWidget: null, 
-        }
-      };
+  // 2. TicTacToe logic
+  if (action.objectId === 'scroll_grid') {
+    if (action.verb === 'PLACE_MARK') {
+      const res = TicTacToe.apply(state, action);
+      if (!res) return { ok: false, error: 'TIC_TAC_TOE_ERROR' };
+      return res;
     }
-}
-
-  if (action.objectId?.startsWith('switch:')) {
-    const res = Coop.apply(state.internal.coopSwitches, action, now);
-    if (!res.ok) return res;
-    const next = cloneState(state);
-    next.internal.coopSwitches = res.nextState;
-    next.public.coopSwitches = Coop.exportPublic(res.nextState);
-    return makeResult({ state: next, diff: res.diff });
   }
 
-  if (action.objectId?.startsWith('light:')) {
-    const res = Lights.apply(state.internal.lightsOut, action, now);
-    if (!res.ok) return res;
-    const next = cloneState(state);
-    next.internal.lightsOut = res.nextState;
-    next.public.lightsOut = Lights.exportPublic(res.nextState);
-    return makeResult({ state: next, diff: res.diff });
-  }
-
-  return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
+  // 3. Fallback
+  return { ok: false, error: 'UNKNOWN_OBJECT', nextState: state };
 }
 
 function cloneState(s) {
-  // flach genug für Prototyp
   return {
-    public: { ...s.public },
+    // Deep clone the nested public objects
+    public: JSON.parse(JSON.stringify(s.public)), 
+    
+    // Internal usually contains Sets or Maps which JSON.stringify breaks,
+    // so we handle them specifically:
     internal: {
-      coopSwitches: { ...s.internal.coopSwitches },
-      lightsOut: {
-        grid: s.internal.lightsOut.grid.map(r => r.slice()),
-        solved: s.internal.lightsOut.solved
-      }
+      ...s.internal,
+      processedActions: new Set(s.internal.processedActions || [])
     }
   };
 }
