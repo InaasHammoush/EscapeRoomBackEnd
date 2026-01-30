@@ -9,8 +9,9 @@ export function initAll() {
         board: Array(9).fill(null),
         score: { player: 0, ghost: 0 },
         round: 1,
-        completed: false,
-        message: "Care for a game, mortal?"
+        message: "Care for a game, mortal?",
+        solved: false, // ✅ Explicitly set to false
+        completed: false 
       }
     },
     internal: {
@@ -26,7 +27,16 @@ export function initAll() {
 // server/src/puzzles/index.js
 
 export function apply(state, action) {
-  // 1. Logic for opening the widget
+  // 1. EMERGENCY GUARD: If state or public is missing, use defaults
+  if (!state || !state.public) {
+    state = initAll();
+  }
+
+  // 2. FILL MISSING KEYS: Ensure scroll_grid exists before passing it to the sub-module
+  if (!state.public.scroll_grid) {
+    state.public.scroll_grid = initAll().public.scroll_grid;
+  }
+  // 3. Logic for opening the widget
   if (action.objectId === 'test_box_01') {
     return {
       ok: true,
@@ -37,7 +47,7 @@ export function apply(state, action) {
     };
   }
 
-  // 2. TicTacToe logic
+  // 4. TicTacToe logic
   if (action.objectId === 'scroll_grid') {
     if (action.verb === 'PLACE_MARK') {
       const res = TicTacToe.apply(state, action);
@@ -46,7 +56,7 @@ export function apply(state, action) {
     }
   }
 
-  // 3. Fallback
+  // 5. Fallback
   return { ok: false, error: 'UNKNOWN_OBJECT', nextState: state };
 }
 
