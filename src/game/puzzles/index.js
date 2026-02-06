@@ -7,10 +7,10 @@ export function initAll() {
     public: {
       scroll_grid: {
         board: Array(9).fill(null),
-        score: { player: 0, ghost: 0 },
+        score: { player: 0, ghost: 0, draws: 0 },
         round: 1,
         message: "Care for a game, mortal?",
-        solved: false, // ✅ Explicitly set to false
+        solved: false,
         completed: false 
       }
     },

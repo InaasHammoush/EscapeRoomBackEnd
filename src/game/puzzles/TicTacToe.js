@@ -45,22 +45,33 @@ export function apply(state, action) {
         score.ghost++;
         message = getRandom(TAUNTS.GHOST_WIN_ROUND);
     } else {
+        score.draws++; // Increment draws if the board is full with no winner
         message = "A stalemate... for now.";
     }
 
-    // ✅ CRITICAL: Check if the match is decided (First to 3)
+    const totalRoundsPlayed = score.player + score.ghost + score.draws;
+
+    // 1. Victory Condition
     if (score.player >= 3) {
         completed = true;
         message = "The scroll shrivels... the path is open.";
-    } else if (score.ghost >= 3) {
-        // Ghost wins match: Reset the nightmare
-        message = getRandom(TAUNTS.MATCH_LOSS);
-        score = { player: 0, ghost: 0 }; 
+    } 
+    // 2. Defeat or Match Stalemate Condition (Reset after 5 rounds)
+    else if (score.ghost >= 3 || totalRoundsPlayed >= 5) {
+        if (score.ghost >= 3) {
+            message = getRandom(TAUNTS.MATCH_LOSS);
+        } else {
+            message = "Five rounds and no master? Time twists back upon itself...";
+        }
+        
+        // Full Reset
+        score = { player: 0, ghost: 0, draws: 0 }; 
         round = 1;
         board = Array(9).fill(null);
-        completed = false; // Player must start over
-    } else {
-        // Match continues to next round
+        completed = false; 
+    } 
+    // 3. Match continues
+    else {
         board = Array(9).fill(null);
         round++;
     }
