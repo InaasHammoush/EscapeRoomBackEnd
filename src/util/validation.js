@@ -18,23 +18,23 @@ export const schemas = {
     roomName: z.string().min(1).max(32)
   }),
   JoinRoom: z.object({
-    roomId: z.string().uuid(),
+    roomId: z.uuid(),
     name: z.string().min(1).max(32)
   }),
   Ready: z.object({
-    roomId: z.string().uuid()
+    roomId: z.uuid(),
   }),
   Chat: z.object({
-    roomId: z.string().uuid(),
+    roomId: z.uuid(),
     text: z.string().min(1).max(500)
   }),
   Interact: z.object({
-    roomId: z.string().uuid(),
-    actionId: z.string().uuid(),
+    roomId: z.uuid(),
+    actionId: z.uuid(),
     objectId: z.string().min(1), // z. B. "switch:A"
     verb: z.string().min(1),     // z. B. "toggle"
-    data: z.record(z.any()).optional()
-  }),
+    data: z.any().optional()
+  }).loose(),
   Turn: z.object({
     roomId: z.uuid(),
     direction: z.enum(['LEFT','RIGHT'])
