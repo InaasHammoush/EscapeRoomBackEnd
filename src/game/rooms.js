@@ -320,15 +320,6 @@ _precheckInventoryForAction(room, action) {
       }
     }
   }
-
-  // Spiegelpuzzle: mount_crystal braucht PURIFIED_CRYSTAL (nur wenn noch nicht gemountet)
-  if (action?.objectId === 'alch:mirror-array' && action?.verb === 'mount_crystal') {
-    const alreadyMounted = !!room.state.public?.alchLightBeamMirrors?.mountedCrystal;
-    if (!alreadyMounted && !bagHas(room.state.internal.inventory, 'PURIFIED_CRYSTAL', 1)) {
-      return { ok: false, error: 'INVENTORY_ITEM_MISSING' };
-    }
-  }
-
   return { ok: true };
 }
 
@@ -364,29 +355,12 @@ _applyInventoryBridge(room, prevPublic, action) {
     changed = true;
   }
 
-  // D) Spiegelpuzzle: Kristall bei mount verbrauchen, bei unmount (vor solve) zurückgeben
-  const prevMirrorMounted = !!prevPublic?.alchLightBeamMirrors?.mountedCrystal;
-  const nextMirrorMounted = !!room.state.public?.alchLightBeamMirrors?.mountedCrystal;
-  const nextMirrorSolved = !!room.state.public?.alchLightBeamMirrors?.solved;
+  // D) Spiegelpuzzle: Reward fürs lösen
+  const prevGridSolved = !!prevPublic?.alchLightBeamGrid?.solved;
+  const nextGridSolved = !!room.state.public?.alchLightBeamGrid?.solved;
 
-  // mount: consume crystal once on false -> true
-  if (!prevMirrorMounted && nextMirrorMounted) {
-    if (bagHas(bag, 'PURIFIED_CRYSTAL', 1)) {
-      bagRemove(bag, 'PURIFIED_CRYSTAL', 1);
-      changed = true;
-    }
-  }
-
-  // unmount: give crystal back if puzzle not solved
-  if (prevMirrorMounted && !nextMirrorMounted && !nextMirrorSolved) {
-    bagAdd(bag, 'PURIFIED_CRYSTAL', 1);
-    changed = true;
-  }
-
-  // E) Reward bei erstmaligem Solve des Spiegelpuzzles
-  const prevMirrorSolved = !!prevPublic?.alchLightBeamMirrors?.solved;
-  if (!prevMirrorSolved && nextMirrorSolved) {
-    bagAdd(bag, 'LIGHT_SIGIL', 1); // kann später fürs Tür-/Finalrätsel genutzt werden
+  if (!prevGridSolved && nextGridSolved) {
+    bagAdd(bag, 'LIGHT_SIGIL', 1);
     changed = true;
   }
 

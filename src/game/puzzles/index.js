@@ -1,33 +1,24 @@
 // src/game/puzzles/index.js
-// Zentraler Dispatcher: initAll() baut Gesamtzustand; apply() leitet an das richtige Puzzle weiter
-
 import * as Coop from './coopSwitches.js';
 import * as Lights from './lightsOut.js';
-import * as AlchMortarEssence from './alchMortarEssence.js';
-import * as AlchKeyTransmutation from './alchKeyTransmutation.js';
-import * as AlchLightBeamMirrors from './alchLightBeamMirrors.js';
+import * as AlchLightBeamGrid from './alchLightBeamGrid.js';
 import { makeResult } from './fsm.js';
 
 export function initAll() {
-  const coopInit = Coop.init();
-  const lightsInit = Lights.init();
-  const mortarInit = AlchMortarEssence.init();
-  const transmuteInit = AlchKeyTransmutation.init();
+  const coop = Coop.init();
+  const lights = Lights.init();
+  const grid = AlchLightBeamGrid.init();
 
   return {
     public: {
-      coopSwitches: Coop.exportPublic(coopInit),
-      lightsOut: Lights.exportPublic(lightsInit),
-      alchMortarEssence: AlchMortarEssence.exportPublic(mortarInit),
-      alchKeyTransmutation: AlchKeyTransmutation.exportPublic(transmuteInit),
-      alchLightBeamMirrors: AlchLightBeamMirrors.exportPublic(AlchLightBeamMirrors.init()),
+      coopSwitches: Coop.exportPublic(coop),
+      lightsOut: Lights.exportPublic(lights),
+      alchLightBeamGrid: AlchLightBeamGrid.exportPublic(grid),
     },
     internal: {
-      coopSwitches: coopInit,
-      lightsOut: lightsInit,
-      alchMortarEssence: mortarInit,
-      alchKeyTransmutation: transmuteInit,
-      alchLightBeamMirrors: AlchLightBeamMirrors.init(),
+      coopSwitches: coop,
+      lightsOut: lights,
+      alchLightBeamGrid: grid,
     },
   };
 }
@@ -38,56 +29,44 @@ export function initAll() {
 export function apply(state, action) {
   const now = Date.now();
 
-  if (!action || !action.objectId) {
-    return makeResult({ state, ok: false, error: 'INVALID_ACTION' });
-  }
-
-  if (action.objectId.startsWith('switch:')) {
+  if (action.objectId?.startsWith('switch:')) {
     return runPuzzle(state, 'coopSwitches', Coop, action, now);
   }
 
-  if (action.objectId.startsWith('light:')) {
+  if (action.objectId?.startsWith('light:')) {
     return runPuzzle(state, 'lightsOut', Lights, action, now);
   }
 
-  if (action.objectId === 'alch:mortar') {
-    return runPuzzle(state, 'alchMortarEssence', AlchMortarEssence, action, now);
+  // V2 only
+  if (action.objectId === 'alch:mirror-grid') {
+    return runPuzzle(state, 'alchLightBeamGrid', AlchLightBeamGrid, action, now);
   }
-
-  if (action.objectId === 'alch:transmuter') {
-    return runPuzzle(state, 'alchKeyTransmutation', AlchKeyTransmutation, action, now);
-  }
-
-  if (action.objectId === 'alch:mirror-array') {
-  return runPuzzle(state, 'alchLightBeamMirrors', AlchLightBeamMirrors, action, now);
-}
 
   return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
 }
 
-function runPuzzle(state, key, moduleRef, action, now) {
-  const res = moduleRef.apply(state.internal[key], action, now);
+function runPuzzle(state, key, module, action, now) {
+  const localState = state.internal[key];
+  if (!localState) {
+    return makeResult({ state, ok: false, error: `MISSING_PUZZLE_STATE:${key}` });
+  }
+
+  const res = module.apply(localState, action, now);
   if (!res.ok) return res;
 
   const next = cloneState(state);
   next.internal[key] = res.nextState;
-  next.public[key] = moduleRef.exportPublic(res.nextState);
+  next.public[key] = module.exportPublic(res.nextState);
 
-  return makeResult({
-    state: next,
-    diff:
-      res.diff && Object.keys(res.diff).length > 0
-        ? res.diff
-        : { [key]: next.public[key] },
-    ok: true,
-    error: null,
-  });
+  const diff =
+    res.diff && Object.keys(res.diff).length > 0
+      ? res.diff
+      : { [key]: next.public[key] };
+
+  return makeResult({ state: next, diff });
 }
 
 function cloneState(s) {
-  // Wichtig: erhält zusätzliche Felder wie inventory, views, etc.
-  if (typeof structuredClone === 'function') {
-    return structuredClone(s);
-  }
+  if (typeof structuredClone === 'function') return structuredClone(s);
   return JSON.parse(JSON.stringify(s));
 }
