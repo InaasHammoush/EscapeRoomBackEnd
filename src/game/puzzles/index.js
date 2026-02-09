@@ -1,5 +1,6 @@
 // Zentraler Dispatcher: initAll() baut Gesamtzustand; apply() leitet an das richtige Puzzle weiter
 import * as TicTacToe from './TicTacToe.js';
+import * as Bookshelf from './bookshelf.js';
 import { makeResult } from './fsm.js';
 
 export function initAll() {
@@ -12,11 +13,16 @@ export function initAll() {
         message: "Care for a game, mortal?",
         solved: false,
         completed: false 
+      },
+      bookshelf_puzzle: {
+        currentOrder: ["Red", "Green", "Blue", "Yellow"], 
+        solved: false
       }
     },
     internal: {
       // Track processed actionIds to prevent double-spending/lag-cheating
       processedActions: new Set(), 
+      bookshelfSolution: ["Yellow", "Red", "Blue", "Green"],
     }
   };
 }
@@ -28,15 +34,22 @@ export function initAll() {
 
 export function apply(state, action) {
   // 1. EMERGENCY GUARD: If state or public is missing, use defaults
+  // ----------------------------
   if (!state || !state.public) {
     state = initAll();
   }
 
   // 2. FILL MISSING KEYS: Ensure scroll_grid exists before passing it to the sub-module
+  // ----------------------------
+  // TODO: This is a band-aid for missing keys. A more robust solution would be to have a schema validation or a state management library that ensures all necessary keys are present.
   if (!state.public.scroll_grid) {
     state.public.scroll_grid = initAll().public.scroll_grid;
   }
-  // 3. Logic for opening the widget
+
+  // 3. Logic for opening widgets
+  // ---------------------------
+
+  // TicTacToe scroll widget
   if (action.objectId === 'test_box_01') {
     return {
       ok: true,
@@ -47,13 +60,32 @@ export function apply(state, action) {
     };
   }
 
-  // 4. TicTacToe logic
+  // bookshelf puzzle widget
+  if (action.objectId === 'bookshelf_01') {
+    return {
+      ok: true,
+      nextState: state,
+      diff: {
+        bookshelf_01: { showWidget: "bookshelf_puzzle" }
+      }
+    };
+  }
+
+  // 4. puzzle logic handlers
+  // ---------------------------
+
+  // TicTacToe logic
   if (action.objectId === 'scroll_grid') {
     if (action.verb === 'PLACE_MARK') {
       const res = TicTacToe.apply(state, action);
       if (!res) return { ok: false, error: 'TIC_TAC_TOE_ERROR' };
       return res;
     }
+  }
+
+  // bookshelf puzzle logic
+  if (action.objectId === 'bookshelf_puzzle') {
+    return Bookshelf.apply(state, action);
   }
 
   // 5. Fallback
