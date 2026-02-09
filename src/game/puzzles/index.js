@@ -2,23 +2,27 @@
 import * as Coop from './coopSwitches.js';
 import * as Lights from './lightsOut.js';
 import * as AlchLightBeamGrid from './alchLightBeamGrid.js';
+import * as AlchMortarEssence from './alchMortarEssence.js';
 import { makeResult } from './fsm.js';
 
 export function initAll() {
   const coop = Coop.init();
   const lights = Lights.init();
   const grid = AlchLightBeamGrid.init();
+  const mortar = AlchMortarEssence.init();
 
   return {
     public: {
       coopSwitches: Coop.exportPublic(coop),
       lightsOut: Lights.exportPublic(lights),
       alchLightBeamGrid: AlchLightBeamGrid.exportPublic(grid),
+      alchMortarEssence: AlchMortarEssence.exportPublic(mortar),
     },
     internal: {
       coopSwitches: coop,
       lightsOut: lights,
       alchLightBeamGrid: grid,
+      alchMortarEssence: mortar,
     },
   };
 }
@@ -40,6 +44,10 @@ export function apply(state, action) {
   // V2 only
   if (action.objectId === 'alch:mirror-grid') {
     return runPuzzle(state, 'alchLightBeamGrid', AlchLightBeamGrid, action, now);
+  }
+
+  if (action.objectId === 'alch:mortar') {
+    return runPuzzle(state, 'alchMortarEssence', AlchMortarEssence, action, now);
   }
 
   return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });

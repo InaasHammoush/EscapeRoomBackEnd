@@ -6,7 +6,7 @@
 // 4) kombinieren -> BlueLiquid
 
 import { makeResult } from './fsm.js';
-import { ALCHEMY_ITEMS, normalizeAlchemyItem } from './helpers/alchemyItems.js';
+import { ALCHEMY_ITEMS, normalizeAlchemyItem } from './helper/alchemyItems.js';
 
 const PUZZLE_KEY = 'alchMortarEssence';
 
@@ -35,6 +35,19 @@ export function apply(state, action) {
 
   const verb = action.verb;
   const next = clone(state);
+
+  // Handle INTERACT verb to open the popup
+  if (verb === 'INTERACT') {
+    return makeResult({
+      state: next,
+      diff: {
+        activeWidget: 'alch:mortar',
+        'alch:mortar': exportPublic(next),
+      },
+      ok: true,
+      error: null,
+    });
+  }
 
   // Optional: hartes Stoppen nach Solve (außer reset/take)
   if (next.solved && verb !== 'reset' && verb !== 'take') {
@@ -123,7 +136,10 @@ export function exportPublic(state) {
       blueLiquidTaken: !!state.output.blueLiquidTaken,
     },
     solved: !!state.solved,
+    activeWidget: !state.output.blueLiquidTaken, // Widget is active until puzzle is fully completed
     nextActions: deriveNextActions(state),
+    message: deriveMessage(state),
+    contents: deriveContents(state),
   };
 }
 
@@ -145,6 +161,44 @@ function deriveNextActions(state) {
   if (!state.output.blueLiquidReady) return ['combine'];
 
   return [];
+}
+
+function deriveMessage(state) {
+  if (state.output.blueLiquidTaken) {
+    return 'The blue essence has been extracted...';
+  }
+  if (state.phase === 'BLUE_LIQUID_READY') {
+    return 'The essence is complete. Take what you have created.';
+  }
+  if (state.phase === 'READY_TO_COMBINE') {
+    return 'Now combine them together...';
+  }
+  if (state.phase === 'ESSENCE_READY') {
+    return 'The essence forms within. Now add the green liquid...';
+  }
+  if (state.phase === 'MOONWORT_INSERTED') {
+    return 'Grind the moonwort to release its essence...';
+  }
+  return 'Place the moonwort into the mortar...';
+}
+
+function deriveContents(state) {
+  const contents = [];
+  
+  if (state.inserted.moonwort) {
+    contents.push('Moonwort');
+  }
+  if (state.processed.essenceReady) {
+    contents.push('Moonwort Essence');
+  }
+  if (state.inserted.greenLiquid) {
+    contents.push('Green Liquid');
+  }
+  if (state.output.blueLiquidReady) {
+    contents.push('Blue Liquid');
+  }
+  
+  return contents;
 }
 
 function ok(nextState) {
