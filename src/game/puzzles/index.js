@@ -17,12 +17,21 @@ export function initAll() {
       bookshelf_puzzle: {
         currentOrder: ["Red", "Green", "Blue", "Yellow"], 
         solved: false
+      },
+      candle_puzzle: {
+        // true = lit, false = extinguished
+        states: [true, true, true, true], 
+        solved: false
       }
     },
     internal: {
       // Track processed actionIds to prevent double-spending/lag-cheating
       processedActions: new Set(), 
       bookshelfSolution: ["Yellow", "Red", "Blue", "Green"],
+      // The specific order the candles must be put out
+      candleSolution: [2, 0, 3, 1],
+      // Tracks what candles the player has actually clicked
+      playerAttempt: []
     }
   };
 }
