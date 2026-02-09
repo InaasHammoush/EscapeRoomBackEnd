@@ -1,6 +1,7 @@
 // Zentraler Dispatcher: initAll() baut Gesamtzustand; apply() leitet an das richtige Puzzle weiter
 import * as TicTacToe from './TicTacToe.js';
 import * as Bookshelf from './bookshelf.js';
+import * as CandlePuzzle from './CandlePuzzle.js';
 import { makeResult } from './fsm.js';
 
 export function initAll() {
@@ -80,6 +81,17 @@ export function apply(state, action) {
     };
   }
 
+  // candle puzzle widget
+  if (action.objectId === 'candle_puzzle') {
+    return {
+      ok: true,
+      nextState: state,
+      diff: {
+        candle_puzzle: { showWidget: "candle_puzzle" }
+      }
+    };
+  }
+
   // 4. puzzle logic handlers
   // ---------------------------
 
@@ -95,6 +107,11 @@ export function apply(state, action) {
   // bookshelf puzzle logic
   if (action.objectId === 'bookshelf_puzzle') {
     return Bookshelf.apply(state, action);
+  }
+
+  // candle puzzle logic
+  if (action.objectId === 'candle_puzzle') {
+    return CandlePuzzle.apply(state, action);
   }
 
   // 5. Fallback
