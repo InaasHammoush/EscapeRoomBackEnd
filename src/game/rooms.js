@@ -243,6 +243,8 @@ export class RoomManager {
 
     this._ensureInventory(room);
 
+    console.log("Applying action in room", id, action);
+
     // 1) Normalize + Inventory-Precheck (ohne zu konsumieren)
     const normalizedAction = this._normalizeActionItems(action);
     const pre = this._precheckInventoryForAction(room, normalizedAction);
