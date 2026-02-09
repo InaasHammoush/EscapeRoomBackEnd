@@ -1,7 +1,7 @@
 // server/src/puzzles/Bookshelf.js
 
 export function apply(state, action) {
-  let { currentOrder, solved, message } = state.public.bookshelf;
+  let { currentOrder, solved } = state.public.bookshelf;
   const { bookshelfSolution } = state.internal;
 
   if (solved) return { ok: false, error: "ALREADY_SOLVED" };
