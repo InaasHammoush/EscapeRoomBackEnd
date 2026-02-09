@@ -15,9 +15,9 @@ import * as RoomStats from '../models/roomStats.model.js';
 import { roomImagesMapper } from '../data/roomImagesMapper.js';
 
 const STARTER_INVENTORY = Object.freeze({
-  MOONWORT: 1,
-  GREEN_LIQUID: 1,
-  GOLD_NUGGET: 1,
+  // MOONWORT: 1,
+  // GREEN_LIQUID: 1,
+  // GOLD_NUGGET: 1,
 });
 
 function getRoomViews(roomName) {
@@ -251,7 +251,9 @@ export class RoomManager {
     if (!pre.ok) return { ok: false, error: pre.error };
 
     // 2) Delegation an Puzzle-Engine (deterministisch)
-    const prevPublic = room.state.public;
+    const prevPublic = typeof structuredClone === 'function'
+      ? structuredClone(room.state.public)
+      : JSON.parse(JSON.stringify(room.state.public));
     const res = Puzzles.apply(room.state, normalizedAction);
     if (!res.ok) return { ok: false, error: res.error || 'INVALID_ACTION' };
 
@@ -363,6 +365,50 @@ _applyInventoryBridge(room, prevPublic, action) {
 
   if (!prevGridSolved && nextGridSolved) {
     bagAdd(bag, 'LIGHT_SIGIL', 1);
+    changed = true;
+  }
+
+    // E) Reward: Portrait/Bücher (FEATHER + GOLD_NUGGET)
+  const prevFeather = !!prevPublic?.alchPortraitBooks?.output?.featherReady;
+  const nextFeather = !!room.state.public?.alchPortraitBooks?.output?.featherReady;
+  if (!prevFeather && nextFeather) {
+    bagAdd(bag, 'FEATHER', 1);
+    changed = true;
+  }
+
+  const prevGoldNugget = !!prevPublic?.alchPortraitBooks?.output?.goldNuggetReady;
+  const nextGoldNugget = !!room.state.public?.alchPortraitBooks?.output?.goldNuggetReady;
+  if (!prevGoldNugget && nextGoldNugget) {
+    bagAdd(bag, 'GOLD_NUGGET', 1);
+    changed = true;
+  }
+
+  // F) Reward: Flaschen-Umfüllung (4 Items)
+  const prevCoal = !!prevPublic?.alchFlaskTransfer?.output?.coalBlockReady;
+  const nextCoal = !!room.state.public?.alchFlaskTransfer?.output?.coalBlockReady;
+  if (!prevCoal && nextCoal) {
+    bagAdd(bag, 'COAL_BLOCK', 1);
+    changed = true;
+  }
+
+  const prevMoonwort = !!prevPublic?.alchFlaskTransfer?.output?.moonwortReady;
+  const nextMoonwort = !!room.state.public?.alchFlaskTransfer?.output?.moonwortReady;
+  if (!prevMoonwort && nextMoonwort) {
+    bagAdd(bag, 'MOONWORT', 1);
+    changed = true;
+  }
+
+  const prevMatches = !!prevPublic?.alchFlaskTransfer?.output?.matchesReady;
+  const nextMatches = !!room.state.public?.alchFlaskTransfer?.output?.matchesReady;
+  if (!prevMatches && nextMatches) {
+    bagAdd(bag, 'MATCHES', 1);
+    changed = true;
+  }
+
+  const prevGreen = !!prevPublic?.alchFlaskTransfer?.output?.greenLiquidReady;
+  const nextGreen = !!room.state.public?.alchFlaskTransfer?.output?.greenLiquidReady;
+  if (!prevGreen && nextGreen) {
+    bagAdd(bag, 'GREEN_LIQUID', 1);
     changed = true;
   }
 
@@ -525,19 +571,29 @@ _applyInventoryBridge(room, prevPublic, action) {
 //   (Das passt zu den Beispiel-Puzzles; du kannst im Konstruktor eine eigene Funktion injizieren.)
 // ------------------------------------------------------------
 function defaultCompletionPredicate(state) {
-  try {
-    const pub = state?.public ?? {};
-    const values = Object.values(pub);
-    if (values.length === 0) return false;
+  const pub = state?.public ?? {};
+  const roomType = pub.roomType;
 
-    // Einfache Heuristik: jedes Objekt mit "solved" muss true sein;
-    // Objekte ohne "solved" zählen nicht negativ.
-    return values.every((v) =>
-      typeof v === 'object' ? (v.solved === undefined ? true : !!v.solved) : true
-    );
-  } catch {
-    return false;
-  }
+  const requiredByRoom = {
+    alchemist: [
+      'alchMortarEssence',
+      'alchLightBeamGrid',
+      'alchPortraitBooks',
+      'alchFlaskTransfer',
+      // optional: hints nur wenn als "Pflicht" gewollt
+      // 'alchHintB1', 'alchHintB2',
+    ],
+    mage: [
+      'coopSwitches',
+      'lightsOut',
+      'scroll_grid',
+    ],
+  };
+
+  const required = requiredByRoom[roomType];
+  if (!required) return false;
+
+  return required.every((k) => !!pub?.[k]?.solved);
 }
 
 // ------------------------------------------------------------
