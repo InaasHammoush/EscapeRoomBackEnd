@@ -13,12 +13,9 @@ import * as Puzzles from './puzzles/index.js';
 import { enqueueScoreEvent } from '../infra/outbox.js'; // optional – nur genutzt, wenn Redis existiert
 import * as RoomStats from '../models/roomStats.model.js';
 import { roomImagesMapper } from '../data/roomImagesMapper.js';
-
-const STARTER_INVENTORY = Object.freeze({
-  MOONWORT: 1,
-  GREEN_LIQUID: 1,
-  GOLD_NUGGET: 1,
-});
+import * as Inventory from './inventory.js';
+const { STARTER_INVENTORY, toPublicInventory, fromPublicInventory, cloneBag, normalizeActionItems, 
+  ensureInventory, precheckInventoryForAction, applyInventoryBridge } = Inventory;
 
 function getRoomViews(roomName) {
   const viewsMap = roomImagesMapper[roomName] || roomImagesMapper.default || {};
@@ -134,7 +131,7 @@ export class RoomManager {
     const room = this.get(id);
     if (!room) throw new Error('ROOM_NOT_FOUND');
 
-    this._ensureInventory(room);
+    ensureInventory(room);
 
     const now = Date.now();
     room.players.set(socketId, {
@@ -190,7 +187,7 @@ export class RoomManager {
     if (!room) throw new Error('ROOM_NOT_FOUND');
 
     if (!room.started) {
-      this._ensureInventory(room);
+      ensureInventory(room);
 
       room.started = true;
       room.startedAt = Date.now();
@@ -211,7 +208,7 @@ export class RoomManager {
     if (!room) return { ok: false, error: 'ROOM_NOT_FOUND' };
     if (!room.started) return { ok: false, error: 'ROOM_NOT_RUNNING' };
 
-    this._ensureInventory(room);
+    ensureInventory(room);
 
     const pub = room.state.public;
     if (direction === 'LEFT') {
@@ -241,13 +238,13 @@ export class RoomManager {
     if (!room.started) return { ok: false, error: 'ROOM_NOT_RUNNING' };
     if (room.completed) return { ok: false, error: 'ROOM_ALREADY_COMPLETED' };
 
-    this._ensureInventory(room);
+    ensureInventory(room);
 
     console.log("Applying action in room", id, action);
 
     // 1) Normalize + Inventory-Precheck (ohne zu konsumieren)
-    const normalizedAction = this._normalizeActionItems(action);
-    const pre = this._precheckInventoryForAction(room, normalizedAction);
+    const normalizedAction = normalizeActionItems(action);
+    const pre = precheckInventoryForAction(room, normalizedAction);
     if (!pre.ok) return { ok: false, error: pre.error };
 
     // 2) Delegation an Puzzle-Engine (deterministisch)
@@ -257,10 +254,10 @@ export class RoomManager {
 
     // 3) Autoritativen Zustand übernehmen
     room.state = res.nextState;
-    this._ensureInventory(room);
+    ensureInventory(room);
 
     // 4) Inventory-Bridge (consume + rewards)
-    const invChanged = this._applyInventoryBridge(room, prevPublic, normalizedAction);
+    const invChanged = applyInventoryBridge(room, prevPublic, normalizedAction);
 
     this._touchSeq(room);
     this._saveSnapshot(id).catch(() => {});
@@ -280,98 +277,6 @@ export class RoomManager {
     return this.get(id)?.players.get(socketId)?.name ?? null;
   }
 
-  // ----------------------------------------------------------
-  // Inventory-Bridge Helpers
-  // ----------------------------------------------------------
-
-  _ensureInventory(room) {
-    if (!room.state.public) room.state.public = {};
-    if (!room.state.internal) room.state.internal = {};
-
-    if (!room.state.internal.inventory) {
-      const fromPub = fromPublicInventory(room.state.public.inventory);
-      room.state.internal.inventory =
-        Object.keys(fromPub).length > 0 ? fromPub : cloneBag(STARTER_INVENTORY);
-    }
-
-    room.state.public.inventory = toPublicInventory(room.state.internal.inventory);
-  }
-
-  _normalizeActionItems(action) {
-    if (!action?.data?.item) return action;
-    const normalized = normalizeItem(action.data.item);
-    if (!normalized) return action; // Puzzle-Validation kann INVALID_ITEM liefern
-    return {
-      ...action,
-      data: { ...action.data, item: normalized },
-    };
-  }
-
-_precheckInventoryForAction(room, action) {
-  // Alchemie-Insert-Checks
-  if (action?.verb === 'insert') {
-    const isAlchemyInsert =
-      action.objectId === 'alch:mortar' || action.objectId === 'alch:transmuter';
-
-    if (isAlchemyInsert) {
-      const item = normalizeItem(action?.data?.item);
-      if (!item) return { ok: true }; // Puzzle-Validation übernimmt
-
-      if (!bagHas(room.state.internal.inventory, item, 1)) {
-        return { ok: false, error: 'INVENTORY_ITEM_MISSING' };
-      }
-    }
-  }
-  return { ok: true };
-}
-
-_applyInventoryBridge(room, prevPublic, action) {
-  let changed = false;
-  const bag = room.state.internal.inventory;
-
-  // A) Verbrauch bei erfolgreichem insert in Alchemie-Puzzles
-  if (
-    action?.verb === 'insert' &&
-    (action.objectId === 'alch:mortar' || action.objectId === 'alch:transmuter')
-  ) {
-    const item = normalizeItem(action?.data?.item);
-    if (item && bagHas(bag, item, 1)) {
-      bagRemove(bag, item, 1);
-      changed = true;
-    }
-  }
-
-  // B) Reward: BLUE_LIQUID wenn Mörser erstmals ready
-  const prevBlue = !!prevPublic?.alchMortarEssence?.output?.blueLiquidReady;
-  const nextBlue = !!room.state.public?.alchMortarEssence?.output?.blueLiquidReady;
-  if (!prevBlue && nextBlue) {
-    bagAdd(bag, 'BLUE_LIQUID', 1);
-    changed = true;
-  }
-
-  // C) Reward: GOLDEN_KEY wenn Transmuter erstmals ready
-  const prevKey = !!prevPublic?.alchKeyTransmutation?.output?.goldenKeyReady;
-  const nextKey = !!room.state.public?.alchKeyTransmutation?.output?.goldenKeyReady;
-  if (!prevKey && nextKey) {
-    bagAdd(bag, 'GOLDEN_KEY', 1);
-    changed = true;
-  }
-
-  // D) Spiegelpuzzle: Reward fürs lösen
-  const prevGridSolved = !!prevPublic?.alchLightBeamGrid?.solved;
-  const nextGridSolved = !!room.state.public?.alchLightBeamGrid?.solved;
-
-  if (!prevGridSolved && nextGridSolved) {
-    bagAdd(bag, 'LIGHT_SIGIL', 1);
-    changed = true;
-  }
-
-  if (changed) {
-    room.state.public.inventory = toPublicInventory(bag);
-  }
-
-  return changed;
-}
 
   // ----------------------------------------------------------
   // Interne Helfer
@@ -540,55 +445,3 @@ function defaultCompletionPredicate(state) {
   }
 }
 
-// ------------------------------------------------------------
-// Inventory utilities
-// ------------------------------------------------------------
-function normalizeItem(input) {
-  const raw = String(input ?? '').trim().toUpperCase();
-
-  if (['MOONWORT', 'MONDRAUTE', 'BOTRYCHIUM_LUNARIA', 'BOTRYCHIUM LUNARIA'].includes(raw)) return 'MOONWORT';
-  if (['GREEN_LIQUID', 'GREENLIQUID', 'GRÜNE_FLÜSSIGKEIT', 'GRUENE_FLUESSIGKEIT'].includes(raw)) return 'GREEN_LIQUID';
-  if (['BLUE_LIQUID', 'BLUELIQUID', 'BLAUE_FLÜSSIGKEIT', 'BLAUE_FLUESSIGKEIT'].includes(raw)) return 'BLUE_LIQUID';
-  if (['GOLD_NUGGET', 'GOLDNUGGET', 'GOLDKLUMPEN', 'RAW_KEY_MATERIAL'].includes(raw)) return 'GOLD_NUGGET';
-  if (['GOLDEN_KEY', 'GOLDENKEY', 'GOLDENER_SCHLUESSEL', 'GOLDENER_SCHLÜSSEL'].includes(raw)) return 'GOLDEN_KEY';
-  if (['PURIFIED_CRYSTAL', 'CRYSTAL', 'REINER_KRISTALL', 'GEREINIGTER_KRISTALL'].includes(raw)) return 'PURIFIED_CRYSTAL';
-  if (['LIGHT_SIGIL', 'LIGHTSIGIL', 'LICHT_SIGIL', 'LICHTSIGIL'].includes(raw)) return 'LIGHT_SIGIL';
-
-  return null;
-}
-
-function cloneBag(bag) {
-  return { ...(bag || {}) };
-}
-
-function bagHas(bag, item, amount = 1) {
-  return Number(bag?.[item] || 0) >= amount;
-}
-
-function bagAdd(bag, item, amount = 1) {
-  bag[item] = Number(bag[item] || 0) + amount;
-}
-
-function bagRemove(bag, item, amount = 1) {
-  const next = Number(bag[item] || 0) - amount;
-  if (next > 0) bag[item] = next;
-  else delete bag[item];
-}
-
-function toPublicInventory(bag) {
-  const items = Object.entries(bag || {})
-    .filter(([, count]) => Number(count) > 0)
-    .map(([item, count]) => ({ item, count: Number(count) }))
-    .sort((a, b) => a.item.localeCompare(b.item));
-
-  return { items };
-}
-
-function fromPublicInventory(publicInventory) {
-  const bag = {};
-  for (const entry of publicInventory?.items || []) {
-    if (!entry?.item) continue;
-    bag[String(entry.item)] = Number(entry.count || 0);
-  }
-  return bag;
-}
