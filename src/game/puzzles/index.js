@@ -1,38 +1,47 @@
+// src/game/puzzles/index.js
 // Zentraler Dispatcher: initAll() baut Gesamtzustand; apply() leitet an das richtige Puzzle weiter
+import * as Coop from './coopSwitches.js';
+import * as Lights from './lightsOut.js';
+import * as AlchLightBeamGrid from './alchLightBeamGrid.js';
+import * as AlchMortarEssence from './alchMortarEssence.js';
 import * as TicTacToe from './TicTacToe.js';
-import * as Bookshelf from './bookshelf.js';
+import * as Bookshelf from './Bookshelf.js';
 import * as CandlePuzzle from './CandlePuzzle.js';
+import * as WizardTransformationTable from './WizTransformationPuzzle.js';
 import { makeResult } from './fsm.js';
 
 export function initAll() {
+  const coop = Coop.init();
+  const lights = Lights.init();
+  const grid = AlchLightBeamGrid.init();
+  const mortar = AlchMortarEssence.init();
+  const tictactoe = TicTacToe.init();
+  const bookshelf = Bookshelf.init();
+  const candle = CandlePuzzle.init();
+  const wizTable = WizardTransformationTable.init();
+
   return {
     public: {
-      scroll_grid: {
-        board: Array(9).fill(null),
-        score: { player: 0, ghost: 0, draws: 0 },
-        round: 1,
-        message: "Care for a game, mortal?",
-        solved: false,
-        completed: false 
-      },
-      bookshelf_puzzle: {
-        currentOrder: ["Red", "Green", "Blue", "Yellow"], 
-        solved: false
-      },
-      candle_puzzle: {
-        // true = lit, false = extinguished
-        states: [true, true, true, true], 
-        solved: false
-      }
+      coopSwitches: Coop.exportPublic(coop),
+      lightsOut: Lights.exportPublic(lights),
+      alchLightBeamGrid: AlchLightBeamGrid.exportPublic(grid),
+      alchMortarEssence: AlchMortarEssence.exportPublic(mortar),
+      scroll_grid: TicTacToe.exportPublic(tictactoe),
+      bookshelf_puzzle: Bookshelf.exportPublic(bookshelf),
+      candle_puzzle: CandlePuzzle.exportPublic(candle),
+      wizard_transformation_table: WizardTransformationTable.exportPublic(wizTable),
     },
     internal: {
-      // Track processed actionIds to prevent double-spending/lag-cheating
+      coopSwitches: coop,
+      lightsOut: lights,
+      alchLightBeamGrid: grid,
+      alchMortarEssence: mortar,
+      scroll_grid: tictactoe,
+      bookshelf_puzzle: bookshelf,
+      candle_puzzle: candle,
+      wizard_transformation_table: wizTable,
+
       processedActions: new Set(), 
-      bookshelfSolution: ["Yellow", "Red", "Blue", "Green"],
-      // The specific order the candles must be put out
-      candleSolution: [2, 0, 3, 1],
-      // Tracks what candles the player has actually clicked
-      playerAttempt: []
     }
   };
 }
@@ -43,79 +52,81 @@ export function initAll() {
 // server/src/puzzles/index.js
 
 export function apply(state, action) {
-  // 1. EMERGENCY GUARD: If state or public is missing, use defaults
-  // ----------------------------
+  const now = Date.now();
+
+  // EMERGENCY GUARD: If state or public is missing, use defaults
   if (!state || !state.public) {
     state = initAll();
   }
 
-  // 2. FILL MISSING KEYS: Ensure scroll_grid exists before passing it to the sub-module
-  // ----------------------------
-  // TODO: This is a band-aid for missing keys. A more robust solution would be to have a schema validation or a state management library that ensures all necessary keys are present.
-  if (!state.public.scroll_grid) {
-    state.public.scroll_grid = initAll().public.scroll_grid;
-  }
-
-  // 3. Logic for opening widgets
-  // ---------------------------
-
-  // TicTacToe scroll widget
+  // WIDGET VISIBILITY HANDLERS (Simple UI toggles can stay here or move to a separate UI manager)
   if (action.objectId === 'test_box_01') {
-    return {
-      ok: true,
-      nextState: state, // Since we just trigger a UI change, state remains same
-      diff: {
-        test_box_01: { showWidget: "scroll_grid" }
-      }
-    };
+    return { ok: true, nextState: state, diff: { test_box_01: { showWidget: "scroll_grid" } } };
   }
-
-  // bookshelf puzzle widget
   if (action.objectId === 'bookshelf_01') {
-    return {
-      ok: true,
-      nextState: state,
-      diff: {
-        bookshelf_01: { showWidget: "bookshelf_puzzle" }
-      }
-    };
+    return { ok: true, nextState: state, diff: { bookshelf_01: { showWidget: "bookshelf_puzzle" } } };
+  }
+  if (action.objectId === 'candle_puzzle_trigger') { 
+    return { ok: true, nextState: state, diff: { candle_puzzle_trigger: { showWidget: "candle_puzzle" } } };
   }
 
-  // candle puzzle widget
-  if (action.objectId === 'candle_puzzle') {
-    return {
-      ok: true,
-      nextState: state,
-      diff: {
-        candle_puzzle: { showWidget: "candle_puzzle" }
-      }
-    };
-  }
-
-  // 4. puzzle logic handlers
-  // ---------------------------
-
-  // TicTacToe logic
+  /// 3. PUZZLE LOGIC ROUTING
+  
+  // Wizard Puzzles
   if (action.objectId === 'scroll_grid') {
-    if (action.verb === 'PLACE_MARK') {
-      const res = TicTacToe.apply(state, action);
-      if (!res) return { ok: false, error: 'TIC_TAC_TOE_ERROR' };
-      return res;
-    }
+    return runPuzzle(state, 'scroll_grid', TicTacToe, action, now);
   }
-
-  // bookshelf puzzle logic
   if (action.objectId === 'bookshelf_puzzle') {
-    return Bookshelf.apply(state, action);
+    return runPuzzle(state, 'bookshelf_puzzle', Bookshelf, action, now);
   }
-
-  // candle puzzle logic
   if (action.objectId === 'candle_puzzle') {
-    return CandlePuzzle.apply(state, action);
+    return runPuzzle(state, 'candle_puzzle', CandlePuzzle, action, now);
+  }
+  if (action.objectId === 'wizard_transformation_table') {
+    return runPuzzle(state, 'wizard_transformation_table', WizardTransformationTable, action, now);
   }
 
-  // 5. Fallback
-  return { ok: false, error: 'UNKNOWN_OBJECT', nextState: state };
+  // temp
+  if (action.objectId?.startsWith('switch:')) {
+    return runPuzzle(state, 'coopSwitches', Coop, action, now);
+  }
+
+  if (action.objectId?.startsWith('light:')) {
+    return runPuzzle(state, 'lightsOut', Lights, action, now);
+  }
+
+  // Alchemist Puzzles
+  // V2 only
+  if (action.objectId === 'alch:mirror-grid') {
+    return runPuzzle(state, 'alchLightBeamGrid', AlchLightBeamGrid, action, now);
+  }
+
+  if (action.objectId === 'alch:mortar') {
+    return runPuzzle(state, 'alchMortarEssence', AlchMortarEssence, action, now);
+  }
+
+  return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
+}
+
+function runPuzzle(state, key, module, action, now) {
+  const localState = state.internal[key];
+  if (!localState) {
+    return makeResult({ state, ok: false, error: `MISSING_PUZZLE_STATE:${key}` });
+  }
+
+  const res = module.apply(localState, action, now);
+  if (!res.ok) return res;
+
+  const next = cloneState(state);
+  next.internal[key] = res.nextState;
+  next.public[key] = module.exportPublic(res.nextState);
+
+  const diff =
+    res.diff && Object.keys(res.diff).length > 0
+      ? res.diff
+      : { [key]: next.public[key] };
+
+  return makeResult({ state: next, diff });
 }
 
 function cloneState(s) {

@@ -1,47 +1,73 @@
-// server/src/puzzles/CandlePuzzle.js
+// src/game/puzzles/CandlePuzzle.js
+import { makeResult } from './fsm.js';
+
+const PUZZLE_KEY = 'candle_puzzle';
+const SOLUTION = [2, 0, 3, 1];
+
+export function init() {
+  return {
+    states: [true, true, true, true],  // Visual state
+    playerAttempt: [],                 // Internal progress
+    solved: false
+  };
+}
+
+export function exportPublic(state) {
+  return {
+    states: [...state.states],
+    solved: state.solved
+  };
+}
 
 export function apply(state, action) {
-  let { states, solved } = state.public.candle_puzzle;
-  let { candleSolution, playerAttempt } = state.internal;
+  if (state.solved) return fail(state, "ALREADY_SOLVED");
+  if (action.verb !== "TOGGLE") return fail(state, "INVALID_VERB");
 
-  if (solved) return { ok: false, error: "ALREADY_SOLVED" };
+  const { candleId } = action.data;
+  if (candleId === undefined || candleId < 0 || candleId > 3) return fail(state, "INVALID_CANDLE_ID");
+  
+  // If candle is already off, ignore
+  if (!state.states[candleId]) return ok(state);
 
-  if (action.verb === "TOGGLE") {
-    const { candleId } = action.data;
+  const next = clone(state);
 
-    // Ignore if the candle is already off or invalid ID
-    if (states[candleId] === false || candleId < 0 || candleId > 3) {
-      return { ok: true, nextState: state };
-    }
+  // Extinguish
+  next.states[candleId] = false;
+  next.playerAttempt.push(candleId);
 
-    // 1. Extinguish the candle visually and record the attempt
-    states[candleId] = false;
-    playerAttempt.push(candleId);
+  // Check Sequence if 4 candles are pressed
+  if (next.playerAttempt.length === 4) {
+    const isCorrect = next.playerAttempt.every((val, index) => val === SOLUTION[index]);
 
-    // 2. Check if the player has finished the sequence
-    if (playerAttempt.length === 4) {
-      // Check if the attempt matches the solution exactly
-      const isCorrect = playerAttempt.every((val, index) => val === candleSolution[index]);
-
-      if (isCorrect) {
-        solved = true;
-      } else {
-        // WRONG ORDER: Delay feedback until the end, then reset
-        states = [true, true, true, true];
-        playerAttempt = [];
-      }
+    if (isCorrect) {
+      next.solved = true;
+    } else {
+      // Wrong order: Reset after this move
+      next.states = [true, true, true, true];
+      next.playerAttempt = [];
     }
   }
 
-  const nextCandleState = { states, solved };
+  return ok(next);
+}
 
-  return {
-    ok: true,
-    nextState: {
-      ...state,
-      public: { ...state.public, candle_puzzle: nextCandleState },
-      internal: { ...state.internal, playerAttempt }
-    },
-    diff: { candle_puzzle: nextCandleState }
+// --- Helpers ---
+function clone(s) {
+  return { 
+    ...s, 
+    states: [...s.states], 
+    playerAttempt: [...s.playerAttempt] 
   };
+}
+
+function ok(state) {
+  return makeResult({
+    ok: true,
+    nextState: state,
+    diff: { [PUZZLE_KEY]: exportPublic(state) }
+  });
+}
+
+function fail(state, error) {
+  return makeResult({ ok: false, state, error });
 }

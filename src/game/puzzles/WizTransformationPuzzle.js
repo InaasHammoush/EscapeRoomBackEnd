@@ -1,0 +1,75 @@
+// src/game/puzzles/WizTransformationPuzzle.js
+import { makeResult } from './fsm.js';
+
+const PUZZLE_KEY = 'wizard_transformation_table';
+const REQUIRED_SCRAPS = ["Flamma", "Purificat"];
+
+export function init() {
+  return {
+    itemOnPlate: null, 
+    powderApplied: false,
+    hasKey: false,
+    solved: false
+  };
+}
+
+export function exportPublic(state) {
+  return { ...state }; // All state here is public safe
+}
+
+export function apply(state, action) {
+  if (state.solved && state.hasKey) return fail(state, "ALREADY_SOLVED");
+
+  const next = clone(state);
+
+  switch (action.verb) {
+    case 'PLACE': {
+      if (action.data.item === "WHITE_ROSE" && !next.itemOnPlate) {
+        next.itemOnPlate = "WHITE_ROSE";
+        return ok(next);
+      }
+      return fail(state, "INVALID_PLACEMENT");
+    }
+
+    case 'SPRINKLE': {
+      if (action.data.item === "BLUE_POWDER" && next.itemOnPlate === "WHITE_ROSE") {
+        next.itemOnPlate = "BLUE_ROSE";
+        next.powderApplied = true;
+        return ok(next);
+      }
+      return fail(state, "INVALID_POWDER_USE");
+    }
+
+    case 'COMBINE': {
+      const { scrapA, scrapB } = action.data;
+      const valid = (scrapA === REQUIRED_SCRAPS[0] && scrapB === REQUIRED_SCRAPS[1]) ||
+                    (scrapA === REQUIRED_SCRAPS[1] && scrapB === REQUIRED_SCRAPS[0]);
+
+      if (next.itemOnPlate === "BLUE_ROSE" && valid) {
+        next.itemOnPlate = "ASHES";
+        next.hasKey = true;
+        next.solved = true;
+        return ok(next);
+      }
+      return fail(state, "COMBINATION_FAILED");
+    }
+
+    default:
+      return fail(state, "INVALID_VERB");
+  }
+}
+
+// --- Helpers ---
+function clone(s) { return { ...s }; }
+
+function ok(state) {
+  return makeResult({
+    ok: true,
+    nextState: state,
+    diff: { [PUZZLE_KEY]: exportPublic(state) }
+  });
+}
+
+function fail(state, error) {
+  return makeResult({ ok: false, state, error });
+}

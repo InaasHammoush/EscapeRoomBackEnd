@@ -1,40 +1,58 @@
-// server/src/puzzles/Bookshelf.js
+// src/game/puzzles/bookshelf.js
+import { makeResult } from './fsm.js';
+
+const PUZZLE_KEY = 'bookshelf_puzzle';
+const SOLUTION = ["BOOK_YELLOW", "BOOK_RED", "BOOK_BLUE", "BOOK_GREEN"];
+
+export function init() {
+  return {
+    currentOrder: ["BOOK_RED", "BOOK_GREEN", "BOOK_BLUE", "BOOK_YELLOW"],
+    solved: false,
+  };
+}
+
+export function exportPublic(state) {
+  return {
+    currentOrder: [...state.currentOrder],
+    solved: state.solved,
+  };
+}
 
 export function apply(state, action) {
-  let { currentOrder, solved } = state.public.bookshelf;
-  const { bookshelfSolution } = state.internal;
+  if (state.solved) return fail(state, "ALREADY_SOLVED");
+  if (action.verb !== "REORDER") return fail(state, "INVALID_VERB");
 
-  if (solved) return { ok: false, error: "ALREADY_SOLVED" };
+  const { fromIndex, toIndex } = action.data;
+  if (fromIndex === undefined || toIndex === undefined) return fail(state, "MISSING_DATA");
 
-  if (action.verb === "REORDER") {
-    const { fromIndex, toIndex } = action.data;
+  const next = clone(state);
 
-    // 1. Validation
-    if (fromIndex === toIndex) return { ok: true, nextState: state };
+  // Perform Move
+  const [movedItem] = next.currentOrder.splice(fromIndex, 1);
+  next.currentOrder.splice(toIndex, 0, movedItem);
 
-    // 2. Perform the Move (Drag and Drop Logic)
-    const nextOrder = [...currentOrder];
-    const [movedItem] = nextOrder.splice(fromIndex, 1); // Remove from old spot
-    nextOrder.splice(toIndex, 0, movedItem);           // Insert at new spot
-
-    currentOrder = nextOrder;
-
-    // 3. Check Win Condition
-    const isWinner = currentOrder.every((val, index) => val === bookshelfSolution[index]);
-
-    if (isWinner) {
-      solved = true;
-    }
+  // Check Win
+  const isWinner = next.currentOrder.every((val, index) => val === SOLUTION[index]);
+  if (isWinner) {
+    next.solved = true;
   }
 
-  const nextBookshelfState = { currentOrder, solved };
+  return ok(next);
+}
 
-  return {
+// --- Helpers ---
+function clone(s) {
+  return { ...s, currentOrder: [...s.currentOrder] };
+}
+
+function ok(state) {
+  return makeResult({
     ok: true,
-    nextState: {
-      ...state,
-      public: { ...state.public, bookshelf: nextBookshelfState }
-    },
-    diff: { bookshelf: nextBookshelfState }
-  };
+    nextState: state,
+    diff: { [PUZZLE_KEY]: exportPublic(state) }
+  });
+}
+
+function fail(state, error) {
+  return makeResult({ ok: false, state, error });
 }
