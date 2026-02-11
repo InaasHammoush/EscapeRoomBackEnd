@@ -1,4 +1,4 @@
-// src/game/puzzles/CandlePuzzle.js
+// src/game/puzzles/wizard_library/CandlePuzzle.js
 import { makeResult } from './fsm.js';
 
 const PUZZLE_KEY = 'candle_puzzle';

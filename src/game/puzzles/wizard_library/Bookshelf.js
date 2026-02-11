@@ -1,4 +1,4 @@
-// src/game/puzzles/bookshelf.js
+// src/game/puzzles/wizard_library/bookshelf.js
 import { makeResult } from './fsm.js';
 
 const PUZZLE_KEY = 'bookshelf_puzzle';

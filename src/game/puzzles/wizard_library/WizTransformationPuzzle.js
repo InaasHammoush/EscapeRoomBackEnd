@@ -1,5 +1,5 @@
-// src/game/puzzles/WizTransformationPuzzle.js
-import { makeResult } from './fsm.js';
+// src/game/puzzles/wizard_library/WizTransformationPuzzle.js
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'wizard_transformation_table';
 const REQUIRED_SCRAPS = ["Flamma", "Purificat"];
@@ -9,6 +9,7 @@ export function init() {
     itemOnPlate: null, 
     powderApplied: false,
     hasKey: false,
+    keyTaken: false,
     solved: false
   };
 }
@@ -18,7 +19,7 @@ export function exportPublic(state) {
 }
 
 export function apply(state, action) {
-  if (state.solved && state.hasKey) return fail(state, "ALREADY_SOLVED");
+  if (state.keyTaken) return fail(state, "ALREADY_TAKEN");
 
   const next = clone(state);
 
@@ -52,6 +53,14 @@ export function apply(state, action) {
         return ok(next);
       }
       return fail(state, "COMBINATION_FAILED");
+    }
+
+    case 'TAKE': {
+      if (next.hasKey && !next.keyTaken) {
+        next.keyTaken = true;
+        return ok(next);
+      }
+      return fail(state, "NOTHING_TO_TAKE");
     }
 
     default:

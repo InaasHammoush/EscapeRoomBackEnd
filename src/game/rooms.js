@@ -259,6 +259,9 @@ export class RoomManager {
     // 4) Inventory-Bridge (consume + rewards)
     const invChanged = applyInventoryBridge(room, prevPublic, normalizedAction);
 
+    // 5) GLOBAL TRIGGERS (The logic for the door)
+    const triggerDiff = this._checkGlobalTriggers(room);
+
     this._touchSeq(room);
     this._saveSnapshot(id).catch(() => {});
     this._persistLocal(id);
@@ -266,7 +269,7 @@ export class RoomManager {
     // Prüfen, ob der Raum nun als "gelöst" gilt
     this._maybeMarkCompleted(room).catch(() => {});
 
-    const diff = { ...(res.diff ?? {}) };
+    const diff = { ...(res.diff ?? {}), ...triggerDiff };
     if (invChanged) diff.inventory = room.state.public.inventory;
 
     return { ok: true, seq: room.seq, diff };
@@ -277,6 +280,35 @@ export class RoomManager {
     return this.get(id)?.players.get(socketId)?.name ?? null;
   }
 
+  /**
+   * Checks for cross-puzzle dependencies.
+   * Specifically: If TicTacToe is solved AND AshKey is inserted -> Open Door.
+   */
+  _checkGlobalTriggers(room) {
+    const pub = room.state.public;
+    const diff = {};
+
+    // Trigger: Door Opening
+    // Dependencies: door_seal (Key) + scroll_grid (TicTacToe)
+    if (pub.door_seal && pub.scroll_grid) {
+      const keyInserted = pub.door_seal.hasKey;
+      const gameSolved = pub.scroll_grid.solved;
+      const alreadyOpen = pub.door_seal.openable;
+
+      if (keyInserted && gameSolved && !alreadyOpen) {
+        console.log("Global Trigger: Door Seal Opening!");
+        
+        // Update Internal & Public state
+        room.state.internal.door_seal.openable = true;
+        room.state.public.door_seal.openable = true;
+        
+        // Add to diff so client reacts immediately
+        diff.door_seal = { ...pub.door_seal, openable: true };
+      }
+    }
+
+    return diff;
+  }
 
   // ----------------------------------------------------------
   // Interne Helfer

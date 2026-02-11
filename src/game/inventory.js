@@ -1,5 +1,8 @@
 // src/game/inventory.js
 
+import { CONSUMPTION_RULES } from './puzzles/helpers/consumptionRules.js';
+import { REWARD_RULES } from './puzzles/helpers/rewardRules.js';
+
 export const STARTER_INVENTORY = Object.freeze({
   MOONWORT: 1,
   GREEN_LIQUID: 1,
@@ -35,67 +38,62 @@ export function normalizeActionItems(action) {
 }
 
 export function precheckInventoryForAction(room, action) {
-    // Alchemie-Insert-Checks
-    if (action?.verb === 'insert') {
-        const isAlchemyInsert =
-            action.objectId === 'alch:mortar' || action.objectId === 'alch:transmuter';
+    const item = _normalizeItem(action?.data?.item);
+    if (!item) return { ok: true }; 
 
-        if (isAlchemyInsert) {
-            const item = _normalizeItem(action?.data?.item);
-            if (!item) return { ok: true }; // Puzzle-Validation übernimmt
+    const rule = CONSUMPTION_RULES.find(r => 
+      r.objectId === action.objectId && 
+      r.verb.toLowerCase() === (action.verb || '').toLowerCase() &&
+      r.item === item
+    );
 
-            if (!_bagHas(room.state.internal.inventory, item, 1)) {
-                return { ok: false, error: 'INVENTORY_ITEM_MISSING' };
-            }
-        }
+    if (rule) {
+      if (!_bagHas(room.state.internal.inventory, item, 1)) {
+        return { ok: false, error: 'INVENTORY_ITEM_MISSING' };
+      }
     }
     return { ok: true };
 }
 
 export function applyInventoryBridge(room, prevPublic, action) {
-    let changed = false;
-    const bag = room.state.internal.inventory;
+  let changed = false;
+  const bag = room.state.internal.inventory;
 
-    // A) Verbrauch bei erfolgreichem insert in Alchemie-Puzzles
-    if ( action?.verb === 'insert' &&
-        (action.objectId === 'alch:mortar' || action.objectId === 'alch:transmuter')) {
-        const item = _normalizeItem(action?.data?.item);
-        if (item && _bagHas(bag, item, 1)) {
-            _bagRemove(bag, item, 1);
-            changed = true;
-        }
+  // 1. Consumption
+  const item = _normalizeItem(action?.data?.item);
+  if (item) {
+    const rule = CONSUMPTION_RULES.find(r => 
+      r.objectId === action.objectId && 
+      r.verb.toLowerCase() === (action.verb || '').toLowerCase() &&
+      r.item === item
+    );
+    if (rule && _bagHas(bag, item, 1)) {
+      _bagRemove(bag, item, 1);
+      changed = true;
     }
+  }
 
-    // B) Reward: BLUE_LIQUID wenn Mörser erstmals ready
-    const prevBlue = !!prevPublic?.alchMortarEssence?.output?.blueLiquidReady;
-    const nextBlue = !!room.state.public?.alchMortarEssence?.output?.blueLiquidReady;
-    if (!prevBlue && nextBlue) {
-        _bagAdd(bag, 'BLUE_LIQUID', 1);
+  // 2. Rewards
+  for (const rule of REWARD_RULES) {
+    const prev = prevPublic?.[rule.puzzle] || {};
+    const next = room.state.public?.[rule.puzzle] || {};
+
+    if (rule.check(prev, next)) {
+      // Handle Array or Single Item
+      const itemsToAward = Array.isArray(rule.item) ? rule.item : [rule.item];
+
+      for (const rewardItem of itemsToAward) {
+        console.log(`[Inventory] Awarding ${rewardItem} from ${rule.puzzle}`);
+        _bagAdd(bag, rewardItem, 1);
         changed = true;
+      }
     }
+  }
 
-    // C) Reward: GOLDEN_KEY wenn Transmuter erstmals ready
-    const prevKey = !!prevPublic?.alchKeyTransmutation?.output?.goldenKeyReady;
-    const nextKey = !!room.state.public?.alchKeyTransmutation?.output?.goldenKeyReady;
-    if (!prevKey && nextKey) {
-        _bagAdd(bag, 'GOLDEN_KEY', 1);
-        changed = true;
-    }
-
-    // D) Spiegelpuzzle: Reward fürs lösen
-    const prevGridSolved = !!prevPublic?.alchLightBeamGrid?.solved;
-    const nextGridSolved = !!room.state.public?.alchLightBeamGrid?.solved;
-
-    if (!prevGridSolved && nextGridSolved) {
-        _bagAdd(bag, 'LIGHT_SIGIL', 1);
-        changed = true;
-    }
-
-    if (changed) {
-        room.state.public.inventory = toPublicInventory(bag);
-    }
-
-    return changed;
+  if (changed) {
+    room.state.public.inventory = toPublicInventory(bag);
+  }
+  return changed;
 }
 
 // ------------------------------------------------------------
@@ -148,6 +146,11 @@ export function _normalizeItem(input) {
   if (['GOLDEN_KEY', 'GOLDENKEY', 'GOLDENER_SCHLUESSEL', 'GOLDENER_SCHLÜSSEL'].includes(raw)) return 'GOLDEN_KEY';
   if (['PURIFIED_CRYSTAL', 'CRYSTAL', 'REINER_KRISTALL', 'GEREINIGTER_KRISTALL'].includes(raw)) return 'PURIFIED_CRYSTAL';
   if (['LIGHT_SIGIL', 'LIGHTSIGIL', 'LICHT_SIGIL', 'LICHTSIGIL'].includes(raw)) return 'LIGHT_SIGIL';
+  if (['WHITE_ROSE', 'WHITEROSE', 'WEISSE_ROSE'].includes(raw)) return 'WHITE_ROSE';
+  if (['BLUE_POWDER', 'BLUEPOWDER', 'BLAUES_PULVER'].includes(raw)) return 'BLUE_POWDER';
+  if (['NOTE_CODE', 'NOTE_2848693', 'CODE_NOTE'].includes(raw)) return 'NOTE_CODE';
+  if (['NOTE_RUNES', 'RUNE_NOTE', 'RUNEN_NOTIZ', 'TRANSLATION_NOTE'].includes(raw)) return 'NOTE_RUNES';
+  if (['ASH_KEY', 'ASHKEY', 'ASHES_KEY', 'ASCHESCHLÜSSEL'].includes(raw)) return 'ASH_KEY';
 
   return null;
 }
