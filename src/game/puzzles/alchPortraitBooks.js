@@ -1,170 +1,108 @@
-// src/game/puzzles/alchemist/alchPortraitBooks.js
-import { makeResult } from '../fsm.js';
+import { makeResult } from './fsm.js';
 
-/**
- * B-S0/B-Side-Prep:
- * Portrait mit hervorgehobenen Büchern.
- * Korrekte Reihenfolge: SALZ -> SCHWEFEL -> QUECKSILBER -> VERFALL
- * Reward (einmalig): FEATHER + GOLD_NUGGET
- */
+const PUZZLE_KEY = 'alchPortraitBooks';
+const VALID_OBJECTS = new Set([
+  'alch:portrait-books',
+  'alch:portrait',
+  'alch:portrait-lady',
+]);
 
-const REQUIRED = ['SALZ', 'SCHWEFEL', 'QUECKSILBER', 'VERFALL'];
-
-const BOOK_ALIASES = {
-  SALZ: 'SALZ',
-  SALT: 'SALZ',
-
-  SCHWEFEL: 'SCHWEFEL',
-  SULFUR: 'SCHWEFEL',
-  SULPHUR: 'SCHWEFEL',
-
-  QUECKSILBER: 'QUECKSILBER',
-  MERCURY: 'QUECKSILBER',
-  MERKUR: 'QUECKSILBER',
-
-  VERFALL: 'VERFALL',
-  DECAY: 'VERFALL',
-};
-
-function normalizeBook(input) {
-  if (!input) return null;
-  const k = String(input).trim().toUpperCase();
-  return BOOK_ALIASES[k] || null;
-}
-
-function cloneState(s) {
-  return {
-    requiredOrder: [...s.requiredOrder],
-    entered: [...s.entered],
-    solved: !!s.solved,
-    mistakes: Number(s.mistakes || 0),
-    output: {
-      featherReady: !!s.output?.featherReady,
-      goldNuggetReady: !!s.output?.goldNuggetReady,
-    },
-  };
-}
+const HINT_WORDS = Object.freeze(['SALZ', 'SCHWEFEL', 'QUECKSILBER', 'VERFALL']);
 
 export function init() {
   return {
-    requiredOrder: [...REQUIRED],
-    entered: [],
-    solved: false,
-    mistakes: 0,
+    revealed: false,
     output: {
       featherReady: false,
       goldNuggetReady: false,
     },
+    solved: false,
+    revealedAt: null,
   };
 }
 
-export function apply(state, action, now = Date.now()) {
-  const verb = action?.verb;
-  const next = cloneState(state);
-
-  if (verb === 'reset') {
-    next.entered = [];
-    return makeResult({
-      state: next,
-      diff: {
-        puzzle: 'alchPortraitBooks',
-        action: 'reset',
-        progress: 0,
-      },
-    });
+export function apply(state, action) {
+  if (!action || !VALID_OBJECTS.has(action.objectId)) {
+    return fail(state, 'INVALID_OBJECT');
   }
 
-  if (verb !== 'press_book') {
-    return makeResult({
-      state,
-      ok: false,
-      error: 'UNSUPPORTED_VERB',
-    });
+  const verb = String(action.verb || '').toLowerCase().trim();
+  const next = clone(state);
+
+  switch (verb) {
+    case 'interact':
+    case 'inspect':
+    case 'click':
+    case 'reveal': {
+      // einmaliges "Loot hinter Portrait"
+      if (!next.revealed) {
+        next.revealed = true;
+        next.revealedAt = Date.now();
+        next.output.featherReady = true;
+        next.output.goldNuggetReady = true;
+        next.solved = true;
+      }
+      return ok(next);
+    }
+
+    case 'reset':
+      return ok(init());
+
+    default:
+      return fail(state, 'INVALID_VERB');
   }
-
-  if (next.solved) {
-    return makeResult({
-      state: next,
-      diff: {
-        puzzle: 'alchPortraitBooks',
-        alreadySolved: true,
-      },
-    });
-  }
-
-  // Input kann in data.book oder im objectId-Suffix liegen (z. B. alch:portrait_books:salz)
-  const fromData = action?.data?.book;
-  const fromObjectId = action?.objectId?.split(':')[2];
-  const book = normalizeBook(fromData ?? fromObjectId);
-
-  if (!book) {
-    return makeResult({
-      state,
-      ok: false,
-      error: 'INVALID_BOOK',
-    });
-  }
-
-  const expected = next.requiredOrder[next.entered.length];
-
-  if (book !== expected) {
-    next.entered = [];
-    next.mistakes += 1;
-
-    return makeResult({
-      state: next,
-      diff: {
-        puzzle: 'alchPortraitBooks',
-        wrong: true,
-        progress: 0,
-        mistakes: next.mistakes,
-        ts: now,
-      },
-    });
-  }
-
-  next.entered.push(book);
-
-  if (next.entered.length === next.requiredOrder.length) {
-    next.solved = true;
-    next.output.featherReady = true;
-    next.output.goldNuggetReady = true;
-
-    return makeResult({
-      state: next,
-      diff: {
-        puzzle: 'alchPortraitBooks',
-        solved: true,
-        progress: next.entered.length,
-        output: { ...next.output },
-      },
-    });
-  }
-
-  return makeResult({
-    state: next,
-    diff: {
-      puzzle: 'alchPortraitBooks',
-      progress: next.entered.length,
-      solved: false,
-    },
-  });
 }
 
 export function exportPublic(state) {
   return {
     solved: !!state.solved,
-    progress: state.entered?.length || 0,
-    length: state.requiredOrder?.length || 0,
-    mistakes: Number(state.mistakes || 0),
-    // requiredOrder bewusst NICHT exportieren (sonst spoilert der Server)
-    output: {
-      featherReady: !!state.output?.featherReady,
-      goldNuggetReady: !!state.output?.goldNuggetReady,
+    revealed: !!state.revealed,
+    hint: {
+      type: 'BOOK_ORDER_HINT',
+      words: [...HINT_WORDS],
+      text: 'Die markierten Bücher zeigen die Reihenfolge: Salz – Schwefel – Quecksilber – Verfall.',
     },
+    output: {
+      featherReady: !!state.output.featherReady,
+      goldNuggetReady: !!state.output.goldNuggetReady,
+    },
+    nextActions: state.revealed ? [] : ['interact'],
+    message: state.revealed
+      ? 'Hinter dem Portrait wurden Feder und Goldklumpen gefunden.'
+      : 'Untersuche das Portrait der Dame.',
   };
 }
 
 export function isSolved(state) {
-  return !!state?.solved;
+  return !!state.solved;
+}
+
+function ok(nextState) {
+  return makeResult({
+    state: nextState,
+    diff: { [PUZZLE_KEY]: exportPublic(nextState) },
+    ok: true,
+    error: null,
+  });
+}
+
+function fail(state, error) {
+  return makeResult({
+    state,
+    diff: {},
+    ok: false,
+    error,
+  });
+}
+
+function clone(s) {
+  return {
+    revealed: !!s.revealed,
+    output: {
+      featherReady: !!s.output?.featherReady,
+      goldNuggetReady: !!s.output?.goldNuggetReady,
+    },
+    solved: !!s.solved,
+    revealedAt: s.revealedAt ?? null,
+  };
 }

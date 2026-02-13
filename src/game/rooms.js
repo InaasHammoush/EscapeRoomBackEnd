@@ -15,9 +15,9 @@ import * as RoomStats from '../models/roomStats.model.js';
 import { roomImagesMapper } from '../data/roomImagesMapper.js';
 
 const STARTER_INVENTORY = Object.freeze({
-  // MOONWORT: 1,
-  // GREEN_LIQUID: 1,
-  // GOLD_NUGGET: 1,
+  MOONWORT: 1,
+  GREEN_LIQUID: 1,
+  GOLD_NUGGET: 1,
 });
 
 function getRoomViews(roomName) {
@@ -83,6 +83,7 @@ export class RoomManager {
           viewIndex: 0, // 0=N, 1=E, 2=S, 3=W
           roomType: roomName, // for client to pick images
           views: getRoomViews(roomName),
+          alchDoorState: null,
           inventory: toPublicInventory(starterBag),
         },
         internal: {
@@ -92,6 +93,12 @@ export class RoomManager {
       },
     };
 
+    const initialDoorState = this._deriveAlchemistDoorStateFromPublic(room.state.public);
+    room.state.public.alchDoorState = initialDoorState;
+    room.state.public.doorState = {
+      opened: !!initialDoorState.open,
+      updatedAt: initialDoorState.updatedAt,
+    };
     this.rooms.set(id, room);
     this._saveSnapshot(id).catch(() => {});
     this._persistLocal(id);
@@ -243,17 +250,13 @@ export class RoomManager {
 
     this._ensureInventory(room);
 
-    console.log("Applying action in room", id, action);
-
     // 1) Normalize + Inventory-Precheck (ohne zu konsumieren)
     const normalizedAction = this._normalizeActionItems(action);
     const pre = this._precheckInventoryForAction(room, normalizedAction);
     if (!pre.ok) return { ok: false, error: pre.error };
 
     // 2) Delegation an Puzzle-Engine (deterministisch)
-    const prevPublic = typeof structuredClone === 'function'
-      ? structuredClone(room.state.public)
-      : JSON.parse(JSON.stringify(room.state.public));
+    const prevPublic = room.state.public;
     const res = Puzzles.apply(room.state, normalizedAction);
     if (!res.ok) return { ok: false, error: res.error || 'INVALID_ACTION' };
 
@@ -263,6 +266,8 @@ export class RoomManager {
 
     // 4) Inventory-Bridge (consume + rewards)
     const invChanged = this._applyInventoryBridge(room, prevPublic, normalizedAction);
+
+    const doorChanged = this._updateAlchemistDoorState(room, normalizedAction);
 
     this._touchSeq(room);
     this._saveSnapshot(id).catch(() => {});
@@ -300,12 +305,22 @@ export class RoomManager {
   }
 
   _normalizeActionItems(action) {
-    if (!action?.data?.item) return action;
-    const normalized = normalizeItem(action.data.item);
-    if (!normalized) return action; // Puzzle-Validation kann INVALID_ITEM liefern
+    if (!action) return action;
+
+    const canonicalObjectId = normalizeObjectId(action.objectId, action.verb);
+    let next = canonicalObjectId !== action.objectId
+      ? { ...action, objectId: canonicalObjectId }
+      : action;
+
+    if (!next?.data?.item) return next;
+    const normalizedItem = normalizeItem(next.data.item);
+    if (!normalizedItem) return next; // Puzzle-Validation kann INVALID_ITEM liefern
+
+    if (normalizedItem === next.data.item) return next;
+
     return {
-      ...action,
-      data: { ...action.data, item: normalized },
+      ...next,
+      data: { ...next.data, item: normalizedItem },
     };
   }
 
@@ -313,7 +328,9 @@ _precheckInventoryForAction(room, action) {
   // Alchemie-Insert-Checks
   if (action?.verb === 'insert') {
     const isAlchemyInsert =
-      action.objectId === 'alch:mortar' || action.objectId === 'alch:transmuter';
+      action.objectId === 'alch:mortar' ||
+      action.objectId === 'alch:transmuter' ||
+      action.objectId === 'alch:east-door-lock';
 
     if (isAlchemyInsert) {
       const item = normalizeItem(action?.data?.item);
@@ -327,6 +344,111 @@ _precheckInventoryForAction(room, action) {
   return { ok: true };
 }
 
+
+_ensureDoorState(room) {
+  const pub = room?.state?.public;
+  if (!pub) return;
+
+  if (!pub.alchDoorState) {
+    const next = this._deriveAlchemistDoorStateFromPublic(pub);
+    pub.alchDoorState = next;
+    pub.doorState = {
+      opened: !!next.open,
+      updatedAt: next.updatedAt,
+    };
+    return;
+  }
+
+  this._deriveAlchemistDoorState(room);
+}
+
+_deriveAlchemistDoorStateFromPublic(pub) {
+  const sliding = pub?.alchEastSlidingLock || {};
+  const doorSync = pub?.alchEastDoorSync || {};
+  const lightBeam = pub?.alchLightBeamGrid || {};
+
+  const lockVisible = !!(
+    sliding?.output?.lockVisible ??
+    sliding?.lockVisible ??
+    sliding?.solved
+  );
+
+  const keyInserted = !!(
+    doorSync?.output?.keyInserted ??
+    doorSync?.keyInserted
+  );
+
+  const runesActivated = !!(
+    doorSync?.output?.runesActivated ??
+    doorSync?.runesActivated ??
+    lightBeam?.solved
+  );
+
+  const mechanismTriggered = !!(
+    doorSync?.output?.mechanismTriggered ??
+    doorSync?.mechanismTriggered ??
+    doorSync?.output?.opened ??
+    doorSync?.opened ??
+    doorSync?.doorOpen
+  );
+
+  const doorOpenBySync = !!(
+    doorSync?.output?.opened ??
+    doorSync?.opened ??
+    doorSync?.output?.doorOpen ??
+    doorSync?.doorOpen
+  );
+
+  const open = doorOpenBySync || (lockVisible && keyInserted && runesActivated && mechanismTriggered);
+
+  return {
+    lockVisible,
+    keyInserted,
+    runesActivated,
+    mechanismTriggered,
+    open,
+    updatedAt: Date.now(),
+  };
+}
+
+_deriveAlchemistDoorState(room) {
+  const pub = room?.state?.public;
+  if (!pub) return false;
+
+  const prev = pub.alchDoorState || null;
+  const next = this._deriveAlchemistDoorStateFromPublic(pub);
+  pub.alchDoorState = next;
+  pub.doorState = {
+    opened: !!next.open,
+    updatedAt: next.updatedAt,
+  };
+
+  if (!prev) return true;
+  return JSON.stringify(prev) !== JSON.stringify(next);
+}
+
+_updateAlchemistDoorState(room, action) {
+  const objectId = action?.objectId;
+  const watched = new Set([
+    'alch:east-sliding-lock',
+    'alch:east-door-lock',
+    'alch:east-door-sync',
+    'alch:east-door',
+    'alch:east-door-switch',
+    'alch:east-door-mechanism',
+    'alch:east:door',
+    'alch:east:sync-switch',
+    'alch:mirror-grid',
+    'alch:lightbeam-grid',
+    'alch:east-lightbeam',
+    'alch:door',
+    'alch:final-door',
+  ]);
+
+  if (!watched.has(objectId)) return false;
+  return this._deriveAlchemistDoorState(room);
+}
+
 _applyInventoryBridge(room, prevPublic, action) {
   let changed = false;
   const bag = room.state.internal.inventory;
@@ -334,10 +456,19 @@ _applyInventoryBridge(room, prevPublic, action) {
   // A) Verbrauch bei erfolgreichem insert in Alchemie-Puzzles
   if (
     action?.verb === 'insert' &&
-    (action.objectId === 'alch:mortar' || action.objectId === 'alch:transmuter')
+    (
+      action.objectId === 'alch:mortar' ||
+      action.objectId === 'alch:transmuter' ||
+      action.objectId === 'alch:east-door-lock'
+    )
   ) {
     const item = normalizeItem(action?.data?.item);
-    if (item && bagHas(bag, item, 1)) {
+    const canConsume =
+      action.objectId === 'alch:east-door-lock'
+        ? item === 'GOLDEN_KEY'
+        : !!item;
+
+    if (canConsume && item && bagHas(bag, item, 1)) {
       bagRemove(bag, item, 1);
       changed = true;
     }
@@ -359,7 +490,7 @@ _applyInventoryBridge(room, prevPublic, action) {
     changed = true;
   }
 
-  // D) Spiegelpuzzle: Reward fürs lösen
+  // D) Spiegelpuzzle: Kristall bei mount verbrauchen, bei unmount (vor solve) zurückgeben
   const prevGridSolved = !!prevPublic?.alchLightBeamGrid?.solved;
   const nextGridSolved = !!room.state.public?.alchLightBeamGrid?.solved;
 
@@ -368,46 +499,66 @@ _applyInventoryBridge(room, prevPublic, action) {
     changed = true;
   }
 
-    // E) Reward: Portrait/Bücher (FEATHER + GOLD_NUGGET)
-  const prevFeather = !!prevPublic?.alchPortraitBooks?.output?.featherReady;
-  const nextFeather = !!room.state.public?.alchPortraitBooks?.output?.featherReady;
-  if (!prevFeather && nextFeather) {
+  // E) Reward bei erstmaligem Solve des Spiegelpuzzles
+  const prevMirrorSolved = !!prevPublic?.alchLightBeamMirrors?.solved;
+  const nextMirrorSolved = !!room.state.public?.alchLightBeamMirrors?.solved;
+  if (!prevMirrorSolved && nextMirrorSolved) {
+    bagAdd(bag, 'LIGHT_SIGIL', 1); // kann später fürs Tür-/Finalrätsel genutzt werden
+    changed = true;
+  }
+
+  // F) South Reward: Portrait (FEATHER + GOLD_NUGGET)
+  const prevPortrait = prevPublic?.alchPortraitBooks ?? {};
+  const nextPortrait = room.state.public?.alchPortraitBooks ?? {};
+  const prevPortraitSolved = !!prevPortrait?.solved;
+  const nextPortraitSolved = !!nextPortrait?.solved;
+
+  const prevFeather = !!prevPortrait?.output?.featherReady;
+  const nextFeather = !!nextPortrait?.output?.featherReady;
+  if ((!prevFeather && nextFeather) || (!prevPortraitSolved && nextPortraitSolved && !nextFeather)) {
     bagAdd(bag, 'FEATHER', 1);
     changed = true;
   }
 
-  const prevGoldNugget = !!prevPublic?.alchPortraitBooks?.output?.goldNuggetReady;
-  const nextGoldNugget = !!room.state.public?.alchPortraitBooks?.output?.goldNuggetReady;
-  if (!prevGoldNugget && nextGoldNugget) {
+  const prevGoldNugget = !!prevPortrait?.output?.goldNuggetReady;
+  const nextGoldNugget = !!nextPortrait?.output?.goldNuggetReady;
+  if ((!prevGoldNugget && nextGoldNugget) || (!prevPortraitSolved && nextPortraitSolved && !nextGoldNugget)) {
     bagAdd(bag, 'GOLD_NUGGET', 1);
     changed = true;
   }
 
-  // F) Reward: Flaschen-Umfüllung (4 Items)
-  const prevCoal = !!prevPublic?.alchFlaskTransfer?.output?.coalBlockReady;
-  const nextCoal = !!room.state.public?.alchFlaskTransfer?.output?.coalBlockReady;
-  if (!prevCoal && nextCoal) {
+  // G) South Reward: Flask (COAL_BLOCK, MOONWORT, MATCHES, GREEN_LIQUID)
+  const prevFlask = prevPublic?.alchFlaskTransfer ?? {};
+  const nextFlask = room.state.public?.alchFlaskTransfer ?? {};
+  const prevFlaskOut = prevFlask?.output ?? {};
+  const nextFlaskOut = nextFlask?.output ?? {};
+  const prevFlaskSolved = !!prevFlask?.solved;
+  const nextFlaskSolved = !!nextFlask?.solved;
+
+  const prevCoal = !!prevFlaskOut?.coalBlockReady || !!prevFlaskOut?.coalReady;
+  const nextCoal = !!nextFlaskOut?.coalBlockReady || !!nextFlaskOut?.coalReady;
+  if ((!prevCoal && nextCoal) || (!prevFlaskSolved && nextFlaskSolved && !nextCoal)) {
     bagAdd(bag, 'COAL_BLOCK', 1);
     changed = true;
   }
 
-  const prevMoonwort = !!prevPublic?.alchFlaskTransfer?.output?.moonwortReady;
-  const nextMoonwort = !!room.state.public?.alchFlaskTransfer?.output?.moonwortReady;
-  if (!prevMoonwort && nextMoonwort) {
+  const prevMoonwort = !!prevFlaskOut?.moonwortReady;
+  const nextMoonwort = !!nextFlaskOut?.moonwortReady;
+  if ((!prevMoonwort && nextMoonwort) || (!prevFlaskSolved && nextFlaskSolved && !nextMoonwort)) {
     bagAdd(bag, 'MOONWORT', 1);
     changed = true;
   }
 
-  const prevMatches = !!prevPublic?.alchFlaskTransfer?.output?.matchesReady;
-  const nextMatches = !!room.state.public?.alchFlaskTransfer?.output?.matchesReady;
-  if (!prevMatches && nextMatches) {
+  const prevMatches = !!prevFlaskOut?.matchesReady;
+  const nextMatches = !!nextFlaskOut?.matchesReady;
+  if ((!prevMatches && nextMatches) || (!prevFlaskSolved && nextFlaskSolved && !nextMatches)) {
     bagAdd(bag, 'MATCHES', 1);
     changed = true;
   }
 
-  const prevGreen = !!prevPublic?.alchFlaskTransfer?.output?.greenLiquidReady;
-  const nextGreen = !!room.state.public?.alchFlaskTransfer?.output?.greenLiquidReady;
-  if (!prevGreen && nextGreen) {
+  const prevGreen = !!prevFlaskOut?.greenLiquidReady;
+  const nextGreen = !!nextFlaskOut?.greenLiquidReady;
+  if ((!prevGreen && nextGreen) || (!prevFlaskSolved && nextFlaskSolved && !nextGreen)) {
     bagAdd(bag, 'GREEN_LIQUID', 1);
     changed = true;
   }
@@ -483,6 +634,12 @@ _applyInventoryBridge(room, prevPublic, action) {
     // inventory im public-state sichern
     room.state.public.inventory = toPublicInventory(room.state.internal.inventory);
 
+    const restoredDoorState = this._deriveAlchemistDoorStateFromPublic(room.state.public);
+    room.state.public.alchDoorState = restoredDoorState;
+    room.state.public.doorState = {
+      opened: !!restoredDoorState.open,
+      updatedAt: restoredDoorState.updatedAt,
+    };
     this.rooms.set(id, room);
     return room;
   }
@@ -571,34 +728,46 @@ _applyInventoryBridge(room, prevPublic, action) {
 //   (Das passt zu den Beispiel-Puzzles; du kannst im Konstruktor eine eigene Funktion injizieren.)
 // ------------------------------------------------------------
 function defaultCompletionPredicate(state) {
-  const pub = state?.public ?? {};
-  const roomType = pub.roomType;
+  try {
+    const pub = state?.public ?? {};
+    const values = Object.values(pub);
+    if (values.length === 0) return false;
 
-  const requiredByRoom = {
-    alchemist: [
-      'alchMortarEssence',
-      'alchLightBeamGrid',
-      'alchPortraitBooks',
-      'alchFlaskTransfer',
-      // optional: hints nur wenn als "Pflicht" gewollt
-      // 'alchHintB1', 'alchHintB2',
-    ],
-    mage: [
-      'coopSwitches',
-      'lightsOut',
-      'scroll_grid',
-    ],
-  };
-
-  const required = requiredByRoom[roomType];
-  if (!required) return false;
-
-  return required.every((k) => !!pub?.[k]?.solved);
+    // Einfache Heuristik: jedes Objekt mit "solved" muss true sein;
+    // Objekte ohne "solved" zählen nicht negativ.
+    return values.every((v) =>
+      typeof v === 'object' ? (v.solved === undefined ? true : !!v.solved) : true
+    );
+  } catch {
+    return false;
+  }
 }
 
 // ------------------------------------------------------------
 // Inventory utilities
 // ------------------------------------------------------------
+function normalizeObjectId(objectId, verb) {
+  const oid = String(objectId ?? '').trim();
+  const v = String(verb ?? '').trim().toLowerCase();
+
+  if (oid === 'alch:portrait' || oid === 'alch:portrait-lady') return 'alch:portrait-books';
+  if (oid === 'alch:flasks' || oid === 'alch:flask-shelf') return 'alch:flask-transfer';
+  if (oid === 'alch:ritual-paper') return 'alch:transmuter';
+  if (oid === 'alch:hierarchy-note' || oid === 'alch:note-drawer') return 'alch:north-hierarchy-note';
+  if (oid === 'alch:statue-pose') return 'alch:statue';
+
+  if (oid === 'alch:lightbeam-grid' || oid === 'alch:east-lightbeam') return 'alch:mirror-grid';
+
+  if (oid === 'alch:east-door-sync' || oid === 'alch:east:sync-switch') {
+    return v === 'insert' ? 'alch:east-door-lock' : 'alch:east-door-switch';
+  }
+  if (oid === 'alch:east-door' || oid === 'alch:east:door') {
+    return v === 'insert' ? 'alch:east-door-lock' : 'alch:east-door-mechanism';
+  }
+
+  return oid;
+}
+
 function normalizeItem(input) {
   const raw = String(input ?? '').trim().toUpperCase();
 

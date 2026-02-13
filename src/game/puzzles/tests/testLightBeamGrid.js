@@ -1,5 +1,5 @@
 // src/tests/testLightBeamGrid.js
-import * as Grid from '../game/puzzles/alchLightBeamGrid.js';
+import * as Grid from '../alchLightBeamGrid.js';
 
 function act(state, verb, data = {}) {
   const res = Grid.apply(state, {
