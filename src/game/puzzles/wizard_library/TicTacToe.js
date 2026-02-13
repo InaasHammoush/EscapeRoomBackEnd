@@ -95,7 +95,7 @@ export function apply(state, action) {
   return {
     ok: true,
     nextState: nextState, // Return only the local state
-    diff: { scroll_grid: nextState }
+    diff: { tictactoe_scroll: nextState }
   };
 }
 

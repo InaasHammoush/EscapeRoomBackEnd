@@ -30,7 +30,7 @@ export function initAll() {
       lightsOut: Lights.exportPublic(lights),
       alchLightBeamGrid: AlchLightBeamGrid.exportPublic(grid),
       alchMortarEssence: AlchMortarEssence.exportPublic(mortar),
-      scroll_grid: TicTacToe.exportPublic(tictactoe),
+      tictactoe_scroll: TicTacToe.exportPublic(tictactoe),
       bookshelf_puzzle: Bookshelf.exportPublic(bookshelf),
       candle_puzzle: CandlePuzzle.exportPublic(candle),
       wizard_transformation_table: WizardTransformationTable.exportPublic(wizTable),
@@ -42,7 +42,7 @@ export function initAll() {
       lightsOut: lights,
       alchLightBeamGrid: grid,
       alchMortarEssence: mortar,
-      scroll_grid: tictactoe,
+      tictactoe_scroll: tictactoe,
       bookshelf_puzzle: bookshelf,
       candle_puzzle: candle,
       wizard_transformation_table: wizTable,
@@ -62,77 +62,69 @@ export function initAll() {
 export function apply(state, action) {
   const now = Date.now();
 
-  // EMERGENCY GUARD: If state or public is missing, use defaults
+  // EMERGENCY GUARD
   if (!state || !state.public) {
     state = initAll();
   }
 
-  // WIDGET VISIBILITY HANDLERS (Simple UI toggles can stay here or move to a separate UI manager)
-  if (action.objectId === 'test_box_01') {
-    return { ok: true, nextState: state, diff: { test_box_01: { showWidget: "scroll_grid" } } };
-  }
-  if (action.objectId === 'bookshelf_01') {
-    return { ok: true, nextState: state, diff: { bookshelf_01: { showWidget: "bookshelf_puzzle" } } };
-  }
-  if (action.objectId === 'candle_puzzle_trigger') { 
-    return { ok: true, nextState: state, diff: { candle_puzzle_trigger: { showWidget: "candle_puzzle" } } };
+  // handle objectId routing: trigger_ = UI-Element, puzzle_ = Logik
+  if (action.objectId.startsWith('trigger_')) {
+    const widgetResult = routeWidgetTriggers(state, action);
+    if (widgetResult) return widgetResult;
+
+  } else if (action.objectId.startsWith('puzzle_')) {
+    const puzzleResult = routePuzzleLogic(state, action, now);
+    if (puzzleResult) return puzzleResult;
+
+  } else {
+    return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
   }
 
-  // TODO: add the trigger in the Frontend and test
-  if (action.objectId === 'wiz_hint_candles') { 
-    return { ok: true, nextState: state, diff: { wiz_hint_candles: { showWidget: "candle_hint" } } };
+}
+
+function routeWidgetTriggers(state, action) {
+  const widgetMap = {
+    trigger_tictactoe_scroll: "tictactoe_scroll",
+    trigger_bookshelf: "bookshelf_puzzle",
+    trigger_candle_puzzle: "candle_puzzle",
+    trigger_wiz_hint_candles: "candle_hint",
+    trigger_wiz_hint_recipe: "recipe_hint",
+    trigger_wiz_hint_frame: "frame_hint",
+    trigger_merlin_scale: "merlin_scale"
+  };
+
+  const widget = widgetMap[action.objectId];
+
+  if (!widget) return null;
+
+  return {
+    ok: true,
+    nextState: state,
+    diff: {
+      [action.objectId]: { showWidget: widget }
+    }
+  };
+}
+
+function routePuzzleLogic(state, action, now) {
+  const puzzleMap = {
+    puzzle_tictactoe_scroll: ['tictactoe_scroll', TicTacToe],
+    puzzle_bookshelf: ['bookshelf_puzzle', Bookshelf],
+    puzzle_candle: ['candle_puzzle', CandlePuzzle],
+    puzzle_wizard_transformation_table: ['wizard_transformation_table', WizardTransformationTable],
+    puzzle_merlin_scale: ['merlin_scale', MerlinScale],
+    puzzle_door_seal: ['door_seal', DoorSeal],
+    // TODO: change the format of the objectID for alchemist puzzles
+    'alch:mirror-grid': ['alchLightBeamGrid', AlchLightBeamGrid],
+    'alch:mortar': ['alchMortarEssence', AlchMortarEssence]
+  };
+
+  if (puzzleMap[action.objectId]) {
+    const [key, PuzzleClass] = puzzleMap[action.objectId];
+    return runPuzzle(state, key, PuzzleClass, action, now);
   }
 
-  // TODO: add the trigger in the Frontend and test
-  if (action.objectId === 'wiz_hint_recipe') { 
-    return { ok: true, nextState: state, diff: { wiz_hint_recipe: { showWidget: "recipe_hint" } } };
-  }
-
-  // TODO: add the trigger in the Frontend and test
-  if (action.objectId === 'wiz_hint_frame') { 
-    return { ok: true, nextState: state, diff: { wiz_hint_frame: { showWidget: "frame_hint" } } };
-  }
-
-  if (action.objectId === 'merlin_scale_trigger') { 
-    return { ok: true, nextState: state, diff: { merlin_scale_trigger: { showWidget: "merlin_scale" } } };
-  }
-
-  /// 3. PUZZLE LOGIC ROUTING
-  
-  // Wizard Puzzles
-  if (action.objectId === 'scroll_grid') {
-    return runPuzzle(state, 'scroll_grid', TicTacToe, action, now);
-  }
-  if (action.objectId === 'bookshelf_puzzle') {
-    return runPuzzle(state, 'bookshelf_puzzle', Bookshelf, action, now);
-  }
-  if (action.objectId === 'candle_puzzle') {
-    return runPuzzle(state, 'candle_puzzle', CandlePuzzle, action, now);
-  }
-  if (action.objectId === 'wizard_transformation_table') {
-    return runPuzzle(state, 'wizard_transformation_table', WizardTransformationTable, action, now);
-  }
-
-  // temp
-  if (action.objectId?.startsWith('switch:')) {
-    return runPuzzle(state, 'coopSwitches', Coop, action, now);
-  }
-
-  if (action.objectId?.startsWith('light:')) {
-    return runPuzzle(state, 'lightsOut', Lights, action, now);
-  }
-
-  // Alchemist Puzzles
-  // V2 only
-  if (action.objectId === 'alch:mirror-grid') {
-    return runPuzzle(state, 'alchLightBeamGrid', AlchLightBeamGrid, action, now);
-  }
-
-  if (action.objectId === 'alch:mortar') {
-    return runPuzzle(state, 'alchMortarEssence', AlchMortarEssence, action, now);
-  }
-
-  return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
+  return null;
 }
 
 function runPuzzle(state, key, module, action, now) {
