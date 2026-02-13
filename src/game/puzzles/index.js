@@ -9,8 +9,8 @@ import * as AlchKeyTransmutation from './alchKeyTransmutation.js';
 import * as TicTacToe from './TicTacToe.js';
 import * as AlchHintB1 from './hints/alchHintB1.js';
 import * as AlchHintB2 from './hints/alchHintB2.js';
-import * as AlchPortraitBooks from './alchemist/alchPortraitBooks.js';
-import * as AlchFlaskTransfer from './alchemist/alchFlaskTransfer.js';
+import * as AlchPortraitBooks from './alchPortraitBooks.js';
+import * as AlchFlaskTransfer from './alchFlaskTransfer.js';
 import { makeResult } from './fsm.js';
 
 export function initAll() {
