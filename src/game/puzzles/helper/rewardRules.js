@@ -2,7 +2,7 @@
 
 
 // DEFINE REWARD RULES (Outputs)
-const REWARD_RULES = [
+export const REWARD_RULES = [
   // Alchemist Room Rewards
   { 
     puzzle: 'alchMortarEssence', 
@@ -35,5 +35,10 @@ const REWARD_RULES = [
     puzzle: 'wizard_transformation_table',
     check: (prev, next) => !prev.keyTaken && next.keyTaken,
     item: 'ASH_KEY'     // Rose burned -> receive Ash Key
+  },
+  {
+    puzzle: 'merlin_scale',
+    check: (prev, next) => !prev.solved && next.solved,
+    item: ['WHITE_ROSE', 'SKETCH_ALCHEMIST'] // Scale balanced -> receive White Rose for transformation and sketch of the Alchemist
   }
 ];

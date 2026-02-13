@@ -1,5 +1,5 @@
 // src/game/puzzles/wizard_library/bookshelf.js
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'bookshelf_puzzle';
 const SOLUTION = ["BOOK_YELLOW", "BOOK_RED", "BOOK_BLUE", "BOOK_GREEN"];

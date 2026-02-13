@@ -2,7 +2,7 @@
 
 const TAUNTS = {
   PLAYER_MOVE: ["A bold choice...", "I've seen that before.", "Tick, tock...", "Still trying?"],
-  GHOST_WIN_ROUND: ["Point for the departed.", "You're slow, mortal.", "The cold grows deeper."],
+  GHOST_WIN_ROUND: ["Point for the departed.", "You're slow, mortal.", "The cold grows deeper.", "I have eternity. You don't.", "You'll never leave this room."],
   PLAYER_WIN_ROUND: ["Lucky guess.", "Enjoy your fleeting victory.", "A temporary setback."],
   MATCH_LOSS: ["Time is a circle. Let's begin again.", "You'll never leave this room.", "I have eternity. You don't."]
 };

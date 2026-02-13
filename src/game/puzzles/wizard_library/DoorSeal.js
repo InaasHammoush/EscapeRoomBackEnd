@@ -1,5 +1,5 @@
 // src/game/puzzles/doorSeal.js
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'door_seal';
 

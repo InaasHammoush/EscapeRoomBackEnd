@@ -1,5 +1,5 @@
 // src/game/puzzles/wizard_library/CandlePuzzle.js
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'candle_puzzle';
 const SOLUTION = [2, 0, 3, 1];

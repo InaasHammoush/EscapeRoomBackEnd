@@ -8,7 +8,8 @@ import * as TicTacToe from './wizard_library/TicTacToe.js';
 import * as Bookshelf from './wizard_library/Bookshelf.js';
 import * as CandlePuzzle from './wizard_library/CandlePuzzle.js';
 import * as WizardTransformationTable from './wizard_library/WizTransformationPuzzle.js';
-import * as DoorSeal from './DoorSeal.js';
+import * as MerlinScale from './wizard_library/MerlinScale.js';
+import * as DoorSeal from './wizard_library/DoorSeal.js';
 import { makeResult } from './fsm.js';
 
 export function initAll() {
@@ -20,6 +21,7 @@ export function initAll() {
   const bookshelf = Bookshelf.init();
   const candle = CandlePuzzle.init();
   const wizTable = WizardTransformationTable.init();
+  const merlinScale = MerlinScale.init();
   const doorSeal = DoorSeal.init();
 
   return {
@@ -32,6 +34,7 @@ export function initAll() {
       bookshelf_puzzle: Bookshelf.exportPublic(bookshelf),
       candle_puzzle: CandlePuzzle.exportPublic(candle),
       wizard_transformation_table: WizardTransformationTable.exportPublic(wizTable),
+      merlin_scale: MerlinScale.exportPublic(merlinScale),
       door_seal: DoorSeal.exportPublic(doorSeal),
     },
     internal: {
@@ -43,6 +46,7 @@ export function initAll() {
       bookshelf_puzzle: bookshelf,
       candle_puzzle: candle,
       wizard_transformation_table: wizTable,
+      merlin_scale: merlinScale,
       door_seal: doorSeal,
 
       processedActions: new Set(), 
@@ -72,6 +76,25 @@ export function apply(state, action) {
   }
   if (action.objectId === 'candle_puzzle_trigger') { 
     return { ok: true, nextState: state, diff: { candle_puzzle_trigger: { showWidget: "candle_puzzle" } } };
+  }
+
+  // TODO: add the trigger in the Frontend and test
+  if (action.objectId === 'wiz_hint_candles') { 
+    return { ok: true, nextState: state, diff: { wiz_hint_candles: { showWidget: "candle_hint" } } };
+  }
+
+  // TODO: add the trigger in the Frontend and test
+  if (action.objectId === 'wiz_hint_recipe') { 
+    return { ok: true, nextState: state, diff: { wiz_hint_recipe: { showWidget: "recipe_hint" } } };
+  }
+
+  // TODO: add the trigger in the Frontend and test
+  if (action.objectId === 'wiz_hint_frame') { 
+    return { ok: true, nextState: state, diff: { wiz_hint_frame: { showWidget: "frame_hint" } } };
+  }
+
+  if (action.objectId === 'merlin_scale_trigger') { 
+    return { ok: true, nextState: state, diff: { merlin_scale_trigger: { showWidget: "merlin_scale" } } };
   }
 
   /// 3. PUZZLE LOGIC ROUTING

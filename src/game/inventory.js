@@ -1,7 +1,7 @@
 // src/game/inventory.js
 
-import { CONSUMPTION_RULES } from './puzzles/helpers/consumptionRules.js';
-import { REWARD_RULES } from './puzzles/helpers/rewardRules.js';
+import { CONSUMPTION_RULES } from './puzzles/helper/consumptionRules.js';
+import { REWARD_RULES } from './puzzles/helper/rewardRules.js';
 
 export const STARTER_INVENTORY = Object.freeze({
   MOONWORT: 1,
@@ -151,6 +151,7 @@ export function _normalizeItem(input) {
   if (['NOTE_CODE', 'NOTE_2848693', 'CODE_NOTE'].includes(raw)) return 'NOTE_CODE';
   if (['NOTE_RUNES', 'RUNE_NOTE', 'RUNEN_NOTIZ', 'TRANSLATION_NOTE'].includes(raw)) return 'NOTE_RUNES';
   if (['ASH_KEY', 'ASHKEY', 'ASHES_KEY', 'ASCHESCHLÜSSEL'].includes(raw)) return 'ASH_KEY';
+  if (['SKETCH_ALCHEMIST', 'ALCHEMIST_SKETCH', 'ALCHEMISTIN_SKIZZE'].includes(raw)) return 'SKETCH_ALCHEMIST';
 
   return null;
 }
