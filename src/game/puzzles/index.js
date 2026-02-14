@@ -101,7 +101,7 @@ function routeWidgetTriggers(state, action) {
     ok: true,
     nextState: state,
     diff: {
-      [action.objectId]: { showWidget: widget }
+      activeWidget: widget
     }
   };
 }

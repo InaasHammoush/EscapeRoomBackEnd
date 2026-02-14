@@ -83,11 +83,15 @@ function clone(s) {
 function ok(state) {
   return makeResult({
     ok: true,
-    nextState: state,
+    state: state, 
     diff: { [PUZZLE_KEY]: exportPublic(state) }
   });
 }
 
 function fail(state, error) {
-  return makeResult({ ok: false, state, error });
+  return makeResult({ 
+    ok: false, 
+    state: state, 
+    error 
+  });
 }
