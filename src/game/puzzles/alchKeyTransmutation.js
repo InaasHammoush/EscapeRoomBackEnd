@@ -34,9 +34,20 @@ export function apply(state, action) {
   const verb = normalizeVerb(action.verb);
   const next = clone(state);
 
-  if (verb === 'interact' || verb === 'inspect' || verb === 'open') {
-    return ok(next);
+    // Handle INTERACT verb to open the popup
+  if (verb === 'interact') {
+    return makeResult({
+      state: next,
+      diff: {
+        activeWidget: 'alch:transmuter',
+        'alch:transmuter': exportPublic(next),
+      },
+      ok: true,
+      error: null,
+    });
   }
+
+
 
   if (verb === 'reset') {
     return ok(init());
