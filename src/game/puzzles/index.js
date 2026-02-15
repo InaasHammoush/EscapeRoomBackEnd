@@ -90,7 +90,9 @@ function routeWidgetTriggers(state, action) {
     trigger_wiz_hint_candles: "candle_hint",
     trigger_wiz_hint_recipe: "recipe_hint",
     trigger_wiz_hint_frame: "frame_hint",
-    trigger_merlin_scale: "merlin_scale"
+    trigger_merlin_scale: "merlin_scale",
+    trigger_mortar: "mortar_puzzle",
+    trigger_transmuter: "transmuter_puzzle",
   };
 
   const widget = widgetMap[action.objectId];
@@ -114,9 +116,8 @@ function routePuzzleLogic(state, action, now) {
     puzzle_wizard_transformation_table: ['wizard_transformation_table', WizardTransformationTable],
     puzzle_merlin_scale: ['merlin_scale', MerlinScale],
     puzzle_door_seal: ['door_seal', DoorSeal],
-    // TODO: change the format of the objectID for alchemist puzzles
-    'alch:mirror-grid': ['alchLightBeamGrid', AlchLightBeamGrid],
-    'alch:mortar': ['alchMortarEssence', AlchMortarEssence]
+    puzzle_light_beam_grid: ['alchLightBeamGrid', AlchLightBeamGrid],
+    puzzle_mortar: ['alchMortarEssence', AlchMortarEssence]
   };
 
   if (puzzleMap[action.objectId]) {
