@@ -139,19 +139,25 @@ export function _bagRemove(bag, item, amount = 1) {
 export function _normalizeItem(input) {
   const raw = String(input ?? '').trim().toUpperCase();
 
-  if (['MOONWORT', 'MONDRAUTE', 'BOTRYCHIUM_LUNARIA', 'BOTRYCHIUM LUNARIA'].includes(raw)) return 'MOONWORT';
-  if (['GREEN_LIQUID', 'GREENLIQUID', 'GRÜNE_FLÜSSIGKEIT', 'GRUENE_FLUESSIGKEIT'].includes(raw)) return 'GREEN_LIQUID';
-  if (['BLUE_LIQUID', 'BLUELIQUID', 'BLAUE_FLÜSSIGKEIT', 'BLAUE_FLUESSIGKEIT'].includes(raw)) return 'BLUE_LIQUID';
-  if (['GOLD_NUGGET', 'GOLDNUGGET', 'GOLDKLUMPEN', 'RAW_KEY_MATERIAL'].includes(raw)) return 'GOLD_NUGGET';
-  if (['GOLDEN_KEY', 'GOLDENKEY', 'GOLDENER_SCHLUESSEL', 'GOLDENER_SCHLÜSSEL'].includes(raw)) return 'GOLDEN_KEY';
-  if (['PURIFIED_CRYSTAL', 'CRYSTAL', 'REINER_KRISTALL', 'GEREINIGTER_KRISTALL'].includes(raw)) return 'PURIFIED_CRYSTAL';
-  if (['LIGHT_SIGIL', 'LIGHTSIGIL', 'LICHT_SIGIL', 'LICHTSIGIL'].includes(raw)) return 'LIGHT_SIGIL';
-  if (['WHITE_ROSE', 'WHITEROSE', 'WEISSE_ROSE'].includes(raw)) return 'WHITE_ROSE';
-  if (['BLUE_POWDER', 'BLUEPOWDER', 'BLAUES_PULVER'].includes(raw)) return 'BLUE_POWDER';
-  if (['NOTE_CODE', 'NOTE_2848693', 'CODE_NOTE'].includes(raw)) return 'NOTE_CODE';
-  if (['NOTE_RUNES', 'RUNE_NOTE', 'RUNEN_NOTIZ', 'TRANSLATION_NOTE'].includes(raw)) return 'NOTE_RUNES';
-  if (['ASH_KEY', 'ASHKEY', 'ASHES_KEY', 'ASCHESCHLÜSSEL'].includes(raw)) return 'ASH_KEY';
-  if (['SKETCH_ALCHEMIST', 'ALCHEMIST_SKETCH', 'ALCHEMISTIN_SKIZZE'].includes(raw)) return 'SKETCH_ALCHEMIST';
+  // Alchemist Items
+  if (['MOONWORT', 'MONDRAUTE'].includes(raw)) return 'MOONWORT';
+  if (['GREEN_LIQUID', 'GREENLIQUID'].includes(raw)) return 'GREEN_LIQUID';
+  if (['BLUE_LIQUID', 'BLUELIQUID'].includes(raw)) return 'BLUE_LIQUID';
+  if (['EMPTY_BOTTLE', 'BOTTLE'].includes(raw)) return 'EMPTY_BOTTLE'; 
+  if (['GOLD_NUGGET', 'GOLDNUGGET'].includes(raw)) return 'GOLD_NUGGET';
+  if (['GOLDEN_KEY', 'GOLDENKEY'].includes(raw)) return 'GOLDEN_KEY';
+  if (['LIGHT_SIGIL', 'LIGHTSIGIL'].includes(raw)) return 'LIGHT_SIGIL';
+  if (['FEATHER', 'FEDER'].includes(raw)) return 'FEATHER';
+  if (['COAL_BLOCK', 'COAL'].includes(raw)) return 'COAL_BLOCK';
+  if (['MATCHES', 'STREICHHOLZ'].includes(raw)) return 'MATCHES';
+
+  // Wizard Items
+  if (['WHITE_ROSE', 'WHITEROSE'].includes(raw)) return 'WHITE_ROSE';
+  if (['BLUE_POWDER', 'BLUEPOWDER'].includes(raw)) return 'BLUE_POWDER';
+  if (['NOTE_CODE', 'CODE_NOTE'].includes(raw)) return 'NOTE_CODE';
+  if (['NOTE_RUNES', 'RUNE_NOTE'].includes(raw)) return 'NOTE_RUNES';
+  if (['ASH_KEY', 'ASHKEY'].includes(raw)) return 'ASH_KEY';
+  if (['SKETCH_ALCHEMIST', 'ALCHEMIST_SKETCH'].includes(raw)) return 'SKETCH_ALCHEMIST';
 
   return null;
 }

@@ -1,11 +1,10 @@
 // src/game/puzzles/index.js
-// Vereinheitlichter Dispatcher:
-// - behält Legacy/Alchemy-Routing aus Alchemist-Branch
-// - behält trigger_/puzzle_ Routing-Schema aus Wizard-Branch (pre-merge ohne Wizard-Module)
+// Unified Dispatcher: Integrates Wizard + Alchemist 
 
 import * as Coop from './coopSwitches.js';
 import * as Lights from './lightsOut.js';
 
+// --- Alchemist Modules ---
 import * as AlchPortraitBooks from './alchPortraitBooks.js';
 import * as AlchFlaskTransfer from './alchFlaskTransfer.js';
 import * as AlchMortarEssence from './alchMortarEssence.js';
@@ -17,7 +16,13 @@ import * as AlchEastSlidingLock from './alchEastSlidingLock.js';
 import * as AlchEastDoorSync from './alchEastDoorSync.js';
 import * as AlchLightBeamGrid from './alchLightBeamGrid.js';
 
-import * as TicTacToe from './TicTacToe.js';
+// --- Wizard Modules ---
+import * as TicTacToe from './wizard_library/TicTacToe.js';
+import * as Bookshelf from './wizard_library/Bookshelf.js';
+import * as CandlePuzzle from './wizard_library/CandlePuzzle.js';
+import * as WizardTransformationTable from './wizard_library/WizTransformationPuzzle.js';
+import * as MerlinScale from './wizard_library/MerlinScale.js';
+import * as DoorSeal from './wizard_library/DoorSeal.js';
 
 import { makeResult } from './fsm.js';
 
@@ -30,54 +35,57 @@ export function initAll() {
     // Alchemy South
     alchPortraitBooks: AlchPortraitBooks.init(),
     alchFlaskTransfer: AlchFlaskTransfer.init(),
-
     // Alchemy West
     alchMortarEssence: AlchMortarEssence.init(),
     alchKeyTransmutation: AlchKeyTransmutation.init(),
     alchWestCodeboxJigsaw: AlchWestCodeboxJigsaw.init(),
-
     // Alchemy North
     alchNorthHierarchyNote: AlchNorthHierarchyNote.init(),
     alchStatuePose: AlchStatuePose.init(),
-
     // Alchemy East
     alchEastSlidingLock: AlchEastSlidingLock.init(),
     alchEastDoorSync: AlchEastDoorSync.init(),
     alchLightBeamGrid: AlchLightBeamGrid.init(),
 
-    // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
+    // --- Wizard ---
     tictactoe_scroll: TicTacToe.init(),
+    bookshelf_puzzle: Bookshelf.init(),
+    candle_puzzle: CandlePuzzle.init(),
+    wizard_transformation_table: WizardTransformationTable.init(),
+    merlin_scale: MerlinScale.init(),
+    door_seal: DoorSeal.init(),
 
-    // Optional shared infra state (for compatibility)
+    // Infra
     processedActions: new Set(),
   };
 
   return {
     public: {
-      // Demo/Legacy
+      // Demo
       coopSwitches: Coop.exportPublic(internal.coopSwitches),
       lightsOut: Lights.exportPublic(internal.lightsOut),
-
-      // Alchemy South
+      // Alchemy
       alchPortraitBooks: AlchPortraitBooks.exportPublic(internal.alchPortraitBooks),
       alchFlaskTransfer: AlchFlaskTransfer.exportPublic(internal.alchFlaskTransfer),
-
       // Alchemy West
       alchMortarEssence: AlchMortarEssence.exportPublic(internal.alchMortarEssence),
       alchKeyTransmutation: AlchKeyTransmutation.exportPublic(internal.alchKeyTransmutation),
       alchWestCodeboxJigsaw: AlchWestCodeboxJigsaw.exportPublic(internal.alchWestCodeboxJigsaw),
-
       // Alchemy North
       alchNorthHierarchyNote: AlchNorthHierarchyNote.exportPublic(internal.alchNorthHierarchyNote),
       alchStatuePose: AlchStatuePose.exportPublic(internal.alchStatuePose),
-
       // Alchemy East
       alchEastSlidingLock: AlchEastSlidingLock.exportPublic(internal.alchEastSlidingLock),
       alchEastDoorSync: AlchEastDoorSync.exportPublic(internal.alchEastDoorSync),
       alchLightBeamGrid: AlchLightBeamGrid.exportPublic(internal.alchLightBeamGrid),
-
-      // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
+      
+      // Wizard
       tictactoe_scroll: TicTacToe.exportPublic(internal.tictactoe_scroll),
+      bookshelf_puzzle: Bookshelf.exportPublic(internal.bookshelf_puzzle),
+      candle_puzzle: CandlePuzzle.exportPublic(internal.candle_puzzle),
+      wizard_transformation_table: WizardTransformationTable.exportPublic(internal.wizard_transformation_table),
+      merlin_scale: MerlinScale.exportPublic(internal.merlin_scale),
+      door_seal: DoorSeal.exportPublic(internal.door_seal),
     },
     internal,
   };
@@ -89,7 +97,6 @@ export function initAll() {
 export function apply(state, action) {
   const now = Date.now();
 
-  // emergency-guard behavior beibehalten
   if (!state?.public || !state?.internal) {
     state = initAll();
   }
@@ -100,18 +107,14 @@ export function apply(state, action) {
     return makeResult({ state, ok: false, error: 'MISSING_OBJECT_ID' });
   }
 
-  // ------------------------------------------------------------
-  // 1) Widget-Triggers (wizard-branch): trigger_*
-  // ------------------------------------------------------------
+  // 1) Widget-Triggers
   if (objectId.startsWith('trigger_')) {
     const widgetResult = routeWidgetTriggers(state, action);
     if (widgetResult) return widgetResult;
     return makeResult({ state, ok: false, error: 'UNKNOWN_TRIGGER' });
   }
 
-  // ------------------------------------------------------------
-  // 2) Puzzle-Routing (wizard-branch): puzzle_*
-  // ------------------------------------------------------------
+  // 2) Puzzle-Routing
   if (objectId.startsWith('puzzle_')) {
     const puzzleResult = routePuzzleLogic(state, action, now);
     if (puzzleResult) return puzzleResult;
@@ -123,9 +126,16 @@ export function apply(state, action) {
 
 function routeWidgetTriggers(state, action) {
   const widgetMap = {
-    trigger_tictactoe_scroll: 'tictactoe_scroll',
+    // --- WIZARD ---
+    trigger_tictactoe_scroll: "tictactoe_scroll",
+    trigger_bookshelf: "bookshelf_puzzle",
+    trigger_candle_puzzle: "candle_puzzle",
+    trigger_wiz_hint_candles: "candle_hint",
+    trigger_wiz_hint_recipe: "recipe_hint",
+    trigger_wiz_hint_frame: "frame_hint",
+    trigger_merlin_scale: "merlin_scale",
 
-    // Alchemy Widget-Aliase (frontend-kompatibel)
+    // --- ALCHEMIST ---
     trigger_mortar: 'mortar_puzzle',
     trigger_alch_mortar: 'mortar_puzzle',
 
@@ -183,26 +193,32 @@ function routePuzzleLogic(state, action, now) {
     puzzle_coop_switches: ['coopSwitches', Coop],
     puzzle_lights_out: ['lightsOut', Lights],
 
-    // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
-    puzzle_tictactoe_scroll: ['tictactoe_scroll', TicTacToe],
+    // --- Wizard ---
+    puzzle_tictactoe_scroll:            ['tictactoe_scroll', TicTacToe],
+    puzzle_bookshelf:                   ['bookshelf_puzzle', Bookshelf],
+    puzzle_candle:                      ['candle_puzzle', CandlePuzzle],
+    puzzle_wizard_transformation_table: ['wizard_transformation_table', WizardTransformationTable],
+    puzzle_merlin_scale:                ['merlin_scale', MerlinScale],
+    puzzle_door_seal:                   ['door_seal', DoorSeal],
 
-    // Alchemy via puzzle_ prefix
-    puzzle_light_beam_grid: ['alchLightBeamGrid', AlchLightBeamGrid],
-    puzzle_mortar: ['alchMortarEssence', AlchMortarEssence],
-    puzzle_transmuter: ['alchKeyTransmutation', AlchKeyTransmutation],
-    puzzle_west_codebox: ['alchWestCodeboxJigsaw', AlchWestCodeboxJigsaw],
-    puzzle_portrait_books: ['alchPortraitBooks', AlchPortraitBooks],
-    puzzle_flask_transfer: ['alchFlaskTransfer', AlchFlaskTransfer],
+    // --- Alchemist ---
+    puzzle_light_beam_grid:      ['alchLightBeamGrid', AlchLightBeamGrid],
+    puzzle_mortar:               ['alchMortarEssence', AlchMortarEssence],
+    puzzle_transmuter:           ['alchKeyTransmutation', AlchKeyTransmutation],
+    puzzle_west_codebox:         ['alchWestCodeboxJigsaw', AlchWestCodeboxJigsaw],
+    puzzle_portrait_books:       ['alchPortraitBooks', AlchPortraitBooks],
+    puzzle_flask_transfer:       ['alchFlaskTransfer', AlchFlaskTransfer],
     puzzle_north_hierarchy_note: ['alchNorthHierarchyNote', AlchNorthHierarchyNote],
-    puzzle_statue_pose: ['alchStatuePose', AlchStatuePose],
-    puzzle_east_sliding_lock: ['alchEastSlidingLock', AlchEastSlidingLock],
-    puzzle_east_door_sync: ['alchEastDoorSync', AlchEastDoorSync],
+    puzzle_statue_pose:          ['alchStatuePose', AlchStatuePose],
+    puzzle_east_sliding_lock:    ['alchEastSlidingLock', AlchEastSlidingLock],
+    puzzle_east_door_sync:       ['alchEastDoorSync', AlchEastDoorSync],
   };
 
   const hit = puzzleMap[oid];
   if (!hit) return null;
 
   const [key, moduleRef] = hit;
+  
   const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
   const puzzleAction = canonicalObjectId
     ? { ...action, objectId: canonicalObjectId }
@@ -210,13 +226,13 @@ function routePuzzleLogic(state, action, now) {
 
   return runPuzzle(state, key, moduleRef, puzzleAction, now);
 }
+
 function runPuzzle(state, key, moduleRef, action, now) {
   const localState = state?.internal?.[key];
   if (!localState) {
     return makeResult({ state, ok: false, error: `MISSING_PUZZLE_STATE:${key}` });
   }
 
-  // Übergibt zusätzlich globalen state als 5. Parameter (branch1 kompatibel)
   const res = moduleRef.apply(localState, action, now, state);
 
   if (!res?.ok) {
