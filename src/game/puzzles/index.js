@@ -1,23 +1,23 @@
 // src/game/puzzles/index.js
-// Zentraler Dispatcher: initAll() baut Gesamtzustand; apply() leitet an das richtige Puzzle weiter
+// Vereinheitlichter Dispatcher:
+// - behält Legacy/Alchemy-Routing aus Alchemist-Branch
+// - behält trigger_/puzzle_ Routing-Schema aus Wizard-Branch (pre-merge ohne Wizard-Module)
 
 import * as Coop from './coopSwitches.js';
 import * as Lights from './lightsOut.js';
 
 import * as AlchPortraitBooks from './alchPortraitBooks.js';
 import * as AlchFlaskTransfer from './alchFlaskTransfer.js';
-
 import * as AlchMortarEssence from './alchMortarEssence.js';
 import * as AlchKeyTransmutation from './alchKeyTransmutation.js';
-
 import * as AlchWestCodeboxJigsaw from './alchWestCodeboxJigsaw.js';
-
 import * as AlchNorthHierarchyNote from './alchNorthHierarchyNote.js';
 import * as AlchStatuePose from './alchStatuePose.js';
-
 import * as AlchEastSlidingLock from './alchEastSlidingLock.js';
 import * as AlchEastDoorSync from './alchEastDoorSync.js';
 import * as AlchLightBeamGrid from './alchLightBeamGrid.js';
+
+import * as TicTacToe from './TicTacToe.js';
 
 import { makeResult } from './fsm.js';
 
@@ -27,43 +27,57 @@ export function initAll() {
     coopSwitches: Coop.init(),
     lightsOut: Lights.init(),
 
-    // South
+    // Alchemy South
     alchPortraitBooks: AlchPortraitBooks.init(),
     alchFlaskTransfer: AlchFlaskTransfer.init(),
 
-    // West
+    // Alchemy West
     alchMortarEssence: AlchMortarEssence.init(),
     alchKeyTransmutation: AlchKeyTransmutation.init(),
     alchWestCodeboxJigsaw: AlchWestCodeboxJigsaw.init(),
 
-    // North
+    // Alchemy North
     alchNorthHierarchyNote: AlchNorthHierarchyNote.init(),
     alchStatuePose: AlchStatuePose.init(),
 
-    // East
+    // Alchemy East
     alchEastSlidingLock: AlchEastSlidingLock.init(),
     alchEastDoorSync: AlchEastDoorSync.init(),
     alchLightBeamGrid: AlchLightBeamGrid.init(),
+
+    // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
+    tictactoe_scroll: TicTacToe.init(),
+
+    // Optional shared infra state (branch2 compatibility)
+    processedActions: new Set(),
   };
 
   return {
     public: {
+      // Demo/Legacy
       coopSwitches: Coop.exportPublic(internal.coopSwitches),
       lightsOut: Lights.exportPublic(internal.lightsOut),
 
+      // Alchemy South
       alchPortraitBooks: AlchPortraitBooks.exportPublic(internal.alchPortraitBooks),
       alchFlaskTransfer: AlchFlaskTransfer.exportPublic(internal.alchFlaskTransfer),
 
+      // Alchemy West
       alchMortarEssence: AlchMortarEssence.exportPublic(internal.alchMortarEssence),
       alchKeyTransmutation: AlchKeyTransmutation.exportPublic(internal.alchKeyTransmutation),
       alchWestCodeboxJigsaw: AlchWestCodeboxJigsaw.exportPublic(internal.alchWestCodeboxJigsaw),
 
+      // Alchemy North
       alchNorthHierarchyNote: AlchNorthHierarchyNote.exportPublic(internal.alchNorthHierarchyNote),
       alchStatuePose: AlchStatuePose.exportPublic(internal.alchStatuePose),
 
+      // Alchemy East
       alchEastSlidingLock: AlchEastSlidingLock.exportPublic(internal.alchEastSlidingLock),
       alchEastDoorSync: AlchEastDoorSync.exportPublic(internal.alchEastDoorSync),
       alchLightBeamGrid: AlchLightBeamGrid.exportPublic(internal.alchLightBeamGrid),
+
+      // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
+      tictactoe_scroll: TicTacToe.exportPublic(internal.tictactoe_scroll),
     },
     internal,
   };
@@ -74,12 +88,40 @@ export function initAll() {
  */
 export function apply(state, action) {
   const now = Date.now();
+
+  // Branch2 emergency-guard behavior beibehalten
+  if (!state?.public || !state?.internal) {
+    state = initAll();
+  }
+
   const objectId = String(action?.objectId || '');
   const verb = String(action?.verb || '').trim().toLowerCase();
 
   if (!objectId) {
     return makeResult({ state, ok: false, error: 'MISSING_OBJECT_ID' });
   }
+
+  // ------------------------------------------------------------
+  // 1) Widget-Triggers (wizard-branch): trigger_*
+  // ------------------------------------------------------------
+  if (objectId.startsWith('trigger_')) {
+    const widgetResult = routeWidgetTriggers(state, action);
+    if (widgetResult) return widgetResult;
+    return makeResult({ state, ok: false, error: 'UNKNOWN_TRIGGER' });
+  }
+
+  // ------------------------------------------------------------
+  // 2) Puzzle-Routing (wizard-branch): puzzle_*
+  // ------------------------------------------------------------
+  if (objectId.startsWith('puzzle_')) {
+    const puzzleResult = routePuzzleLogic(state, action, now);
+    if (puzzleResult) return puzzleResult;
+    return makeResult({ state, ok: false, error: 'UNKNOWN_PUZZLE_OBJECT' });
+  }
+
+  // ------------------------------------------------------------
+  // 3) Legacy/Alchemy direct object routing (branch1)
+  // ------------------------------------------------------------
 
   // Demo/Legacy
   if (objectId.startsWith('switch:')) return runPuzzle(state, 'coopSwitches', Coop, action, now);
@@ -99,6 +141,7 @@ export function apply(state, action) {
       now
     );
   }
+
   if (
     objectId === 'alch:flask-transfer' ||
     objectId === 'alch:flasks' ||
@@ -117,6 +160,7 @@ export function apply(state, action) {
   if (objectId === 'alch:mortar') {
     return runPuzzle(state, 'alchMortarEssence', AlchMortarEssence, action, now);
   }
+
   if (objectId === 'alch:transmuter' || objectId === 'alch:ritual-paper') {
     return runPuzzle(
       state,
@@ -126,8 +170,15 @@ export function apply(state, action) {
       now
     );
   }
+
   if (objectId === 'alch:west-codebox' || objectId === 'alch:west-jigsaw') {
-    return runPuzzle(state, 'alchWestCodeboxJigsaw', AlchWestCodeboxJigsaw, action, now);
+    return runPuzzle(
+      state,
+      'alchWestCodeboxJigsaw',
+      AlchWestCodeboxJigsaw,
+      withObjectId(action, 'alch:west-codebox'),
+      now
+    );
   }
 
   // North
@@ -144,6 +195,7 @@ export function apply(state, action) {
       now
     );
   }
+
   if (objectId === 'alch:statue' || objectId === 'alch:statue-pose') {
     return runPuzzle(
       state,
@@ -154,46 +206,110 @@ export function apply(state, action) {
     );
   }
 
-// East
-if (objectId === 'alch:east-sliding-lock') {
-  return runPuzzle(state, 'alchEastSlidingLock', AlchEastSlidingLock, action, now);
-}
+  // East
+  if (objectId === 'alch:east-sliding-lock') {
+    return runPuzzle(state, 'alchEastSlidingLock', AlchEastSlidingLock, action, now);
+  }
 
-// akzeptiere alte + neue Objekt-IDs
-if (
-  objectId === 'alch:east-door-sync' ||
-  objectId === 'alch:east-door' ||
-  objectId === 'alch:east-door-lock' ||
-  objectId === 'alch:east-door-switch' ||
-  objectId === 'alch:east-door-mechanism' ||
-  objectId === 'alch:east:door' ||
-  objectId === 'alch:east:sync-switch'
-) {
-  return runPuzzle(
-    state,
-    'alchEastDoorSync',
-    AlchEastDoorSync,
-    withObjectId(action, canonicalEastDoorObjectId(objectId, verb)),
-    now
-  );
-}
+  if (
+    objectId === 'alch:east-door-sync' ||
+    objectId === 'alch:east-door' ||
+    objectId === 'alch:east-door-lock' ||
+    objectId === 'alch:east-door-switch' ||
+    objectId === 'alch:east-door-mechanism' ||
+    objectId === 'alch:east:door' ||
+    objectId === 'alch:east:sync-switch'
+  ) {
+    return runPuzzle(
+      state,
+      'alchEastDoorSync',
+      AlchEastDoorSync,
+      withObjectId(action, canonicalEastDoorObjectId(objectId, verb)),
+      now
+    );
+  }
 
-// mirror/lightbeam Aliase
-if (
-  objectId === 'alch:mirror-grid' ||
-  objectId === 'alch:lightbeam-grid' ||
-  objectId === 'alch:east-lightbeam'
-) {
-  return runPuzzle(
-    state,
-    'alchLightBeamGrid',
-    AlchLightBeamGrid,
-    withObjectId(action, 'alch:mirror-grid'),
-    now
-  );
-}
+  if (
+    objectId === 'alch:mirror-grid' ||
+    objectId === 'alch:lightbeam-grid' ||
+    objectId === 'alch:east-lightbeam'
+  ) {
+    return runPuzzle(
+      state,
+      'alchLightBeamGrid',
+      AlchLightBeamGrid,
+      withObjectId(action, 'alch:mirror-grid'),
+      now
+    );
+  }
 
   return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
+}
+
+function routeWidgetTriggers(state, action) {
+  const widgetMap = {
+    trigger_tictactoe_scroll: 'tictactoe_scroll',
+
+    // Alchemy Widget-Aliase (wizad-logik-kompatibel)
+    trigger_mortar: 'mortar_puzzle',
+    trigger_transmuter: 'transmuter_puzzle',
+  };
+
+  const widget = widgetMap[String(action?.objectId || '')];
+  if (!widget) return null;
+
+  return makeResult({
+    state,
+    ok: true,
+    error: null,
+    diff: { activeWidget: widget },
+  });
+}
+
+function routePuzzleLogic(state, action, now) {
+  const oid = String(action?.objectId || '');
+
+  const puzzleMap = {
+    // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
+    puzzle_tictactoe_scroll: ['tictactoe_scroll', TicTacToe],
+
+    // Alchemy via puzzle_ prefix
+    puzzle_light_beam_grid: ['alchLightBeamGrid', AlchLightBeamGrid],
+    puzzle_mortar: ['alchMortarEssence', AlchMortarEssence],
+    puzzle_transmuter: ['alchKeyTransmutation', AlchKeyTransmutation],
+    puzzle_west_codebox: ['alchWestCodeboxJigsaw', AlchWestCodeboxJigsaw],
+    puzzle_portrait_books: ['alchPortraitBooks', AlchPortraitBooks],
+    puzzle_flask_transfer: ['alchFlaskTransfer', AlchFlaskTransfer],
+    puzzle_north_hierarchy_note: ['alchNorthHierarchyNote', AlchNorthHierarchyNote],
+    puzzle_statue_pose: ['alchStatuePose', AlchStatuePose],
+    puzzle_east_sliding_lock: ['alchEastSlidingLock', AlchEastSlidingLock],
+    puzzle_east_door_sync: ['alchEastDoorSync', AlchEastDoorSync],
+  };
+
+  const hit = puzzleMap[oid];
+  if (!hit) return null;
+
+  const [key, moduleRef] = hit;
+
+  // canonical objectIds für Alchemy-Module setzen, damit intern gleiche Pfade laufen
+  let patchedAction = action;
+  if (oid === 'puzzle_mortar') patchedAction = withObjectId(action, 'alch:mortar');
+  if (oid === 'puzzle_transmuter') patchedAction = withObjectId(action, 'alch:transmuter');
+  if (oid === 'puzzle_light_beam_grid') patchedAction = withObjectId(action, 'alch:mirror-grid');
+  if (oid === 'puzzle_west_codebox') patchedAction = withObjectId(action, 'alch:west-codebox');
+  if (oid === 'puzzle_portrait_books') patchedAction = withObjectId(action, 'alch:portrait-books');
+  if (oid === 'puzzle_flask_transfer') patchedAction = withObjectId(action, 'alch:flask-transfer');
+  if (oid === 'puzzle_north_hierarchy_note') {
+    patchedAction = withObjectId(action, 'alch:north-hierarchy-note');
+  }
+  if (oid === 'puzzle_statue_pose') patchedAction = withObjectId(action, 'alch:statue');
+  if (oid === 'puzzle_east_sliding_lock') patchedAction = withObjectId(action, 'alch:east-sliding-lock');
+  if (oid === 'puzzle_east_door_sync') {
+    const verb = String(action?.verb || '').trim().toLowerCase();
+    patchedAction = withObjectId(action, canonicalEastDoorObjectId('alch:east-door-sync', verb));
+  }
+
+  return runPuzzle(state, key, moduleRef, patchedAction, now);
 }
 
 function runPuzzle(state, key, moduleRef, action, now) {
@@ -202,9 +318,11 @@ function runPuzzle(state, key, moduleRef, action, now) {
     return makeResult({ state, ok: false, error: `MISSING_PUZZLE_STATE:${key}` });
   }
 
+  // Übergibt zusätzlich globalen state als 5. Parameter (branch1 kompatibel)
   const res = moduleRef.apply(localState, action, now, state);
 
   if (!res?.ok) {
+    // Manche Module liefern bereits ein vollständiges makeResult-artiges Objekt
     if (res && (res.state || res.nextState)) return res;
     return makeResult({ state, ok: false, error: res?.error || 'PUZZLE_APPLY_FAILED' });
   }
@@ -226,9 +344,36 @@ function runPuzzle(state, key, moduleRef, action, now) {
   return makeResult({ state: next, diff, ok: true, error: null });
 }
 
-function cloneState(s) {
-  if (typeof structuredClone === 'function') return structuredClone(s);
-  return JSON.parse(JSON.stringify(s));
+function cloneState(state) {
+  // structuredClone erhält Set/Map korrekt (Node 17+/moderne Runtimes)
+  if (typeof structuredClone === 'function') return structuredClone(state);
+
+  // Fallback: manuell rekursiv (inkl. Set/Map)
+  return deepClone(state);
+}
+
+function deepClone(value) {
+  if (value === null || typeof value !== 'object') return value;
+
+  if (value instanceof Date) return new Date(value.getTime());
+
+  if (value instanceof Set) {
+    const out = new Set();
+    for (const item of value) out.add(deepClone(item));
+    return out;
+  }
+
+  if (value instanceof Map) {
+    const out = new Map();
+    for (const [k, v] of value.entries()) out.set(deepClone(k), deepClone(v));
+    return out;
+  }
+
+  if (Array.isArray(value)) return value.map(deepClone);
+
+  const out = {};
+  for (const k of Object.keys(value)) out[k] = deepClone(value[k]);
+  return out;
 }
 
 function withObjectId(action, objectId) {
