@@ -1,4 +1,4 @@
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchPortraitBooks';
 const VALID_OBJECTS = new Set([

@@ -1,5 +1,5 @@
 // src/game/puzzles/alchNorthHierarchyNote.js
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchNorthHierarchyNote';
 const VALID_OBJECTS = new Set([

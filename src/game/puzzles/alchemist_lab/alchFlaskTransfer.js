@@ -1,4 +1,4 @@
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchFlaskTransfer';
 const OBJECT_IDS = new Set([

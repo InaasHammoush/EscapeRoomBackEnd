@@ -19,7 +19,7 @@
 // - Blocker-/Wall-Kacheln optional
 // - Loop-Schutz über maxSteps + visited(state)
 
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchLightBeamGrid';
 

@@ -5,7 +5,7 @@
 // 3) GOLD_NUGGET auf Papier
 // 4) MATCHES anzünden -> GOLDEN_KEY ready
 
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchKeyTransmutation';
 const VALID_OBJECTS = new Set(['alch:transmuter', 'alch:ritual-paper']);

@@ -4,7 +4,7 @@
 // - Danach Jigsaw (3x3, 0 = Leerfeld)
 // - Beim Lösen: output.blueRoseImageReady = true
 
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchWestCodeboxJigsaw';
 const VALID_OBJECTS = new Set(['alch:west-codebox', 'alch:west-jigsaw']);

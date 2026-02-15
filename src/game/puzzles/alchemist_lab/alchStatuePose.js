@@ -1,5 +1,5 @@
 // src/game/puzzles/alchStatuePose.js
-import { makeResult } from './fsm.js';
+import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchStatuePose';
 const VALID_OBJECTS = new Set([

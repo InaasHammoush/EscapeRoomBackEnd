@@ -5,16 +5,16 @@ import * as Coop from './coopSwitches.js';
 import * as Lights from './lightsOut.js';
 
 // --- Alchemist Modules ---
-import * as AlchPortraitBooks from './alchPortraitBooks.js';
-import * as AlchFlaskTransfer from './alchFlaskTransfer.js';
-import * as AlchMortarEssence from './alchMortarEssence.js';
-import * as AlchKeyTransmutation from './alchKeyTransmutation.js';
-import * as AlchWestCodeboxJigsaw from './alchWestCodeboxJigsaw.js';
-import * as AlchNorthHierarchyNote from './alchNorthHierarchyNote.js';
-import * as AlchStatuePose from './alchStatuePose.js';
-import * as AlchEastSlidingLock from './alchEastSlidingLock.js';
-import * as AlchEastDoorSync from './alchEastDoorSync.js';
-import * as AlchLightBeamGrid from './alchLightBeamGrid.js';
+import * as AlchPortraitBooks from './alchemist_lab/alchPortraitBooks.js';
+import * as AlchFlaskTransfer from './alchemist_lab/alchFlaskTransfer.js';
+import * as AlchMortarEssence from './alchemist_lab/alchMortarEssence.js';
+import * as AlchKeyTransmutation from './alchemist_lab/alchKeyTransmutation.js';
+import * as AlchWestCodeboxJigsaw from './alchemist_lab/alchWestCodeboxJigsaw.js';
+import * as AlchNorthHierarchyNote from './alchemist_lab/alchNorthHierarchyNote.js';
+import * as AlchStatuePose from './alchemist_lab/alchStatuePose.js';
+import * as AlchEastSlidingLock from './alchemist_lab/alchEastSlidingLock.js';
+import * as AlchEastDoorSync from './alchemist_lab/alchEastDoorSync.js';
+import * as AlchLightBeamGrid from './alchemist_lab/alchLightBeamGrid.js';
 
 // --- Wizard Modules ---
 import * as TicTacToe from './wizard_library/TicTacToe.js';

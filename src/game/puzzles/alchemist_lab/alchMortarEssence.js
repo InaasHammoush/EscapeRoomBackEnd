@@ -5,8 +5,8 @@
 // 3) grüne Flüssigkeit einlegen
 // 4) kombinieren -> BlueLiquid
 
-import { makeResult } from './fsm.js';
-import { ALCHEMY_ITEMS, normalizeAlchemyItem } from './helper/alchemyItems.js';
+import { makeResult } from '../fsm.js';
+import { ALCHEMY_ITEMS, normalizeAlchemyItem } from '../helper/alchemyItems.js';
 
 const PUZZLE_KEY = 'alchMortarEssence';
 
