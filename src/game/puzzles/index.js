@@ -250,9 +250,43 @@ function routeWidgetTriggers(state, action) {
   const widgetMap = {
     trigger_tictactoe_scroll: 'tictactoe_scroll',
 
-    // Alchemy Widget-Aliase (wizad-logik-kompatibel)
+    // Alchemy Widget-Aliase (frontend-kompatibel)
     trigger_mortar: 'mortar_puzzle',
+    trigger_alch_mortar: 'mortar_puzzle',
+
     trigger_transmuter: 'transmuter_puzzle',
+    trigger_alch_transmuter: 'transmuter_puzzle',
+
+    trigger_portrait_books: 'portrait_books_puzzle',
+    trigger_alch_portrait_books: 'portrait_books_puzzle',
+    trigger_portrait: 'portrait_books_puzzle',
+
+    trigger_flask_transfer: 'flask_transfer_puzzle',
+    trigger_alch_flask_transfer: 'flask_transfer_puzzle',
+    trigger_flasks: 'flask_transfer_puzzle',
+
+    trigger_west_codebox: 'west_codebox_puzzle',
+    trigger_alch_west_codebox: 'west_codebox_puzzle',
+    trigger_west_jigsaw: 'west_codebox_puzzle',
+
+    trigger_north_hierarchy_note: 'north_hierarchy_note_puzzle',
+    trigger_alch_north_hierarchy_note: 'north_hierarchy_note_puzzle',
+    trigger_hierarchy_note: 'north_hierarchy_note_puzzle',
+
+    trigger_statue_pose: 'statue_pose_puzzle',
+    trigger_alch_statue_pose: 'statue_pose_puzzle',
+    trigger_statue: 'statue_pose_puzzle',
+
+    trigger_east_sliding_lock: 'east_sliding_lock_puzzle',
+    trigger_alch_east_sliding_lock: 'east_sliding_lock_puzzle',
+
+    trigger_east_door_sync: 'east_door_sync_puzzle',
+    trigger_alch_east_door_sync: 'east_door_sync_puzzle',
+    trigger_east_door: 'east_door_sync_puzzle',
+
+    trigger_light_beam_grid: 'light_beam_grid_puzzle',
+    trigger_alch_light_beam_grid: 'light_beam_grid_puzzle',
+    trigger_mirror_grid: 'light_beam_grid_puzzle',
   };
 
   const widget = widgetMap[String(action?.objectId || '')];
