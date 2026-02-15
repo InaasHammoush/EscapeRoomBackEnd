@@ -257,7 +257,8 @@ export class RoomManager {
 
     // 2) Delegation an Puzzle-Engine (deterministisch)
     const prevPublic = room.state.public;
-    const res = Puzzles.apply(room.state, normalizedAction);
+    const puzzleAction = toPuzzleRoutingAction(normalizedAction);
+    const res = Puzzles.apply(room.state, puzzleAction);
     if (!res.ok) return { ok: false, error: res.error || 'INVALID_ACTION' };
 
     // 3) Autoritativen Zustand übernehmen
@@ -766,6 +767,86 @@ function normalizeObjectId(objectId, verb) {
   }
 
   return oid;
+}
+
+function toPuzzleRoutingAction(action) {
+  if (!action) return action;
+
+  const objectId = String(action.objectId ?? '').trim();
+  if (!objectId) return action;
+  if (objectId.startsWith('trigger_')) {
+    return action;
+  }
+  if (objectId.startsWith('puzzle_')) {
+    if (action.canonicalObjectId) return action;
+
+    const verb = String(action.verb ?? '').trim().toLowerCase();
+    const puzzleCanonicalMap = {
+      puzzle_mortar: 'alch:mortar',
+      puzzle_transmuter: 'alch:transmuter',
+      puzzle_west_codebox: 'alch:west-codebox',
+      puzzle_portrait_books: 'alch:portrait-books',
+      puzzle_flask_transfer: 'alch:flask-transfer',
+      puzzle_north_hierarchy_note: 'alch:north-hierarchy-note',
+      puzzle_statue_pose: 'alch:statue',
+      puzzle_east_sliding_lock: 'alch:east-sliding-lock',
+      puzzle_light_beam_grid: 'alch:mirror-grid',
+    };
+
+    if (objectId === 'puzzle_east_door_sync') {
+      return {
+        ...action,
+        canonicalObjectId: verb === 'insert' ? 'alch:east-door-lock' : 'alch:east-door-switch',
+      };
+    }
+
+    const canonicalObjectId = puzzleCanonicalMap[objectId];
+    return canonicalObjectId ? { ...action, canonicalObjectId } : action;
+  }
+
+  if (objectId.startsWith('switch:')) {
+    return { ...action, objectId: 'puzzle_coop_switches', canonicalObjectId: objectId };
+  }
+  if (objectId.startsWith('light:')) {
+    return { ...action, objectId: 'puzzle_lights_out', canonicalObjectId: objectId };
+  }
+
+  if (objectId === 'alch:portrait-books') {
+    return { ...action, objectId: 'puzzle_portrait_books', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:flask-transfer') {
+    return { ...action, objectId: 'puzzle_flask_transfer', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:mortar') {
+    return { ...action, objectId: 'puzzle_mortar', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:transmuter') {
+    return { ...action, objectId: 'puzzle_transmuter', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:west-codebox' || objectId === 'alch:west-jigsaw') {
+    return { ...action, objectId: 'puzzle_west_codebox', canonicalObjectId: 'alch:west-codebox' };
+  }
+  if (objectId === 'alch:north-hierarchy-note') {
+    return { ...action, objectId: 'puzzle_north_hierarchy_note', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:statue') {
+    return { ...action, objectId: 'puzzle_statue_pose', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:east-sliding-lock') {
+    return { ...action, objectId: 'puzzle_east_sliding_lock', canonicalObjectId: objectId };
+  }
+  if (
+    objectId === 'alch:east-door-lock' ||
+    objectId === 'alch:east-door-switch' ||
+    objectId === 'alch:east-door-mechanism'
+  ) {
+    return { ...action, objectId: 'puzzle_east_door_sync', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:mirror-grid') {
+    return { ...action, objectId: 'puzzle_light_beam_grid', canonicalObjectId: objectId };
+  }
+
+  return action;
 }
 
 function normalizeItem(input) {

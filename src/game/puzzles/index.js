@@ -48,7 +48,7 @@ export function initAll() {
     // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
     tictactoe_scroll: TicTacToe.init(),
 
-    // Optional shared infra state (branch2 compatibility)
+    // Optional shared infra state (for compatibility)
     processedActions: new Set(),
   };
 
@@ -89,13 +89,12 @@ export function initAll() {
 export function apply(state, action) {
   const now = Date.now();
 
-  // Branch2 emergency-guard behavior beibehalten
+  // emergency-guard behavior beibehalten
   if (!state?.public || !state?.internal) {
     state = initAll();
   }
 
   const objectId = String(action?.objectId || '');
-  const verb = String(action?.verb || '').trim().toLowerCase();
 
   if (!objectId) {
     return makeResult({ state, ok: false, error: 'MISSING_OBJECT_ID' });
@@ -117,130 +116,6 @@ export function apply(state, action) {
     const puzzleResult = routePuzzleLogic(state, action, now);
     if (puzzleResult) return puzzleResult;
     return makeResult({ state, ok: false, error: 'UNKNOWN_PUZZLE_OBJECT' });
-  }
-
-  // ------------------------------------------------------------
-  // 3) Legacy/Alchemy direct object routing (branch1)
-  // ------------------------------------------------------------
-
-  // Demo/Legacy
-  if (objectId.startsWith('switch:')) return runPuzzle(state, 'coopSwitches', Coop, action, now);
-  if (objectId.startsWith('light:')) return runPuzzle(state, 'lightsOut', Lights, action, now);
-
-  // South
-  if (
-    objectId === 'alch:portrait-books' ||
-    objectId === 'alch:portrait' ||
-    objectId === 'alch:portrait-lady'
-  ) {
-    return runPuzzle(
-      state,
-      'alchPortraitBooks',
-      AlchPortraitBooks,
-      withObjectId(action, 'alch:portrait-books'),
-      now
-    );
-  }
-
-  if (
-    objectId === 'alch:flask-transfer' ||
-    objectId === 'alch:flasks' ||
-    objectId === 'alch:flask-shelf'
-  ) {
-    return runPuzzle(
-      state,
-      'alchFlaskTransfer',
-      AlchFlaskTransfer,
-      withObjectId(action, 'alch:flask-transfer'),
-      now
-    );
-  }
-
-  // West
-  if (objectId === 'alch:mortar') {
-    return runPuzzle(state, 'alchMortarEssence', AlchMortarEssence, action, now);
-  }
-
-  if (objectId === 'alch:transmuter' || objectId === 'alch:ritual-paper') {
-    return runPuzzle(
-      state,
-      'alchKeyTransmutation',
-      AlchKeyTransmutation,
-      withObjectId(action, 'alch:transmuter'),
-      now
-    );
-  }
-
-  if (objectId === 'alch:west-codebox' || objectId === 'alch:west-jigsaw') {
-    return runPuzzle(
-      state,
-      'alchWestCodeboxJigsaw',
-      AlchWestCodeboxJigsaw,
-      withObjectId(action, 'alch:west-codebox'),
-      now
-    );
-  }
-
-  // North
-  if (
-    objectId === 'alch:north-hierarchy-note' ||
-    objectId === 'alch:hierarchy-note' ||
-    objectId === 'alch:note-drawer'
-  ) {
-    return runPuzzle(
-      state,
-      'alchNorthHierarchyNote',
-      AlchNorthHierarchyNote,
-      withObjectId(action, 'alch:north-hierarchy-note'),
-      now
-    );
-  }
-
-  if (objectId === 'alch:statue' || objectId === 'alch:statue-pose') {
-    return runPuzzle(
-      state,
-      'alchStatuePose',
-      AlchStatuePose,
-      withObjectId(action, 'alch:statue'),
-      now
-    );
-  }
-
-  // East
-  if (objectId === 'alch:east-sliding-lock') {
-    return runPuzzle(state, 'alchEastSlidingLock', AlchEastSlidingLock, action, now);
-  }
-
-  if (
-    objectId === 'alch:east-door-sync' ||
-    objectId === 'alch:east-door' ||
-    objectId === 'alch:east-door-lock' ||
-    objectId === 'alch:east-door-switch' ||
-    objectId === 'alch:east-door-mechanism' ||
-    objectId === 'alch:east:door' ||
-    objectId === 'alch:east:sync-switch'
-  ) {
-    return runPuzzle(
-      state,
-      'alchEastDoorSync',
-      AlchEastDoorSync,
-      withObjectId(action, canonicalEastDoorObjectId(objectId, verb)),
-      now
-    );
-  }
-
-  if (
-    objectId === 'alch:mirror-grid' ||
-    objectId === 'alch:lightbeam-grid' ||
-    objectId === 'alch:east-lightbeam'
-  ) {
-    return runPuzzle(
-      state,
-      'alchLightBeamGrid',
-      AlchLightBeamGrid,
-      withObjectId(action, 'alch:mirror-grid'),
-      now
-    );
   }
 
   return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
@@ -304,6 +179,10 @@ function routePuzzleLogic(state, action, now) {
   const oid = String(action?.objectId || '');
 
   const puzzleMap = {
+    // Legacy
+    puzzle_coop_switches: ['coopSwitches', Coop],
+    puzzle_lights_out: ['lightsOut', Lights],
+
     // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
     puzzle_tictactoe_scroll: ['tictactoe_scroll', TicTacToe],
 
@@ -324,28 +203,13 @@ function routePuzzleLogic(state, action, now) {
   if (!hit) return null;
 
   const [key, moduleRef] = hit;
+  const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
+  const puzzleAction = canonicalObjectId
+    ? { ...action, objectId: canonicalObjectId }
+    : action;
 
-  // canonical objectIds für Alchemy-Module setzen, damit intern gleiche Pfade laufen
-  let patchedAction = action;
-  if (oid === 'puzzle_mortar') patchedAction = withObjectId(action, 'alch:mortar');
-  if (oid === 'puzzle_transmuter') patchedAction = withObjectId(action, 'alch:transmuter');
-  if (oid === 'puzzle_light_beam_grid') patchedAction = withObjectId(action, 'alch:mirror-grid');
-  if (oid === 'puzzle_west_codebox') patchedAction = withObjectId(action, 'alch:west-codebox');
-  if (oid === 'puzzle_portrait_books') patchedAction = withObjectId(action, 'alch:portrait-books');
-  if (oid === 'puzzle_flask_transfer') patchedAction = withObjectId(action, 'alch:flask-transfer');
-  if (oid === 'puzzle_north_hierarchy_note') {
-    patchedAction = withObjectId(action, 'alch:north-hierarchy-note');
-  }
-  if (oid === 'puzzle_statue_pose') patchedAction = withObjectId(action, 'alch:statue');
-  if (oid === 'puzzle_east_sliding_lock') patchedAction = withObjectId(action, 'alch:east-sliding-lock');
-  if (oid === 'puzzle_east_door_sync') {
-    const verb = String(action?.verb || '').trim().toLowerCase();
-    patchedAction = withObjectId(action, canonicalEastDoorObjectId('alch:east-door-sync', verb));
-  }
-
-  return runPuzzle(state, key, moduleRef, patchedAction, now);
+  return runPuzzle(state, key, moduleRef, puzzleAction, now);
 }
-
 function runPuzzle(state, key, moduleRef, action, now) {
   const localState = state?.internal?.[key];
   if (!localState) {
@@ -379,50 +243,11 @@ function runPuzzle(state, key, moduleRef, action, now) {
 }
 
 function cloneState(state) {
-  // structuredClone erhält Set/Map korrekt (Node 17+/moderne Runtimes)
-  if (typeof structuredClone === 'function') return structuredClone(state);
-
-  // Fallback: manuell rekursiv (inkl. Set/Map)
-  return deepClone(state);
-}
-
-function deepClone(value) {
-  if (value === null || typeof value !== 'object') return value;
-
-  if (value instanceof Date) return new Date(value.getTime());
-
-  if (value instanceof Set) {
-    const out = new Set();
-    for (const item of value) out.add(deepClone(item));
-    return out;
-  }
-
-  if (value instanceof Map) {
-    const out = new Map();
-    for (const [k, v] of value.entries()) out.set(deepClone(k), deepClone(v));
-    return out;
-  }
-
-  if (Array.isArray(value)) return value.map(deepClone);
-
-  const out = {};
-  for (const k of Object.keys(value)) out[k] = deepClone(value[k]);
-  return out;
-}
-
-function withObjectId(action, objectId) {
-  if (!action || action.objectId === objectId) return action;
-  return { ...action, objectId };
-}
-
-function canonicalEastDoorObjectId(objectId, verb) {
-  if (objectId === 'alch:east-door-sync' || objectId === 'alch:east:sync-switch') {
-    return verb === 'insert' ? 'alch:east-door-lock' : 'alch:east-door-switch';
-  }
-
-  if (objectId === 'alch:east-door' || objectId === 'alch:east:door') {
-    return verb === 'insert' ? 'alch:east-door-lock' : 'alch:east-door-mechanism';
-  }
-
-  return objectId;
+  return {
+    public: JSON.parse(JSON.stringify(state.public)),
+    internal: {
+      ...state.internal,
+      processedActions: new Set(state.internal?.processedActions || []),
+    },
+  };
 }
