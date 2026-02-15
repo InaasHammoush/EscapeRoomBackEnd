@@ -1,164 +1,253 @@
 // src/game/puzzles/index.js
-// Zentraler Dispatcher: initAll() baut Gesamtzustand; apply() leitet an das richtige Puzzle weiter
+// Vereinheitlichter Dispatcher:
+// - behält Legacy/Alchemy-Routing aus Alchemist-Branch
+// - behält trigger_/puzzle_ Routing-Schema aus Wizard-Branch (pre-merge ohne Wizard-Module)
+
 import * as Coop from './coopSwitches.js';
 import * as Lights from './lightsOut.js';
-import * as AlchLightBeamGrid from './alchLightBeamGrid.js';
+
+import * as AlchPortraitBooks from './alchPortraitBooks.js';
+import * as AlchFlaskTransfer from './alchFlaskTransfer.js';
 import * as AlchMortarEssence from './alchMortarEssence.js';
-import * as TicTacToe from './wizard_library/TicTacToe.js';
-import * as Bookshelf from './wizard_library/Bookshelf.js';
-import * as CandlePuzzle from './wizard_library/CandlePuzzle.js';
-import * as WizardTransformationTable from './wizard_library/WizTransformationPuzzle.js';
-import * as MerlinScale from './wizard_library/MerlinScale.js';
-import * as DoorSeal from './wizard_library/DoorSeal.js';
+import * as AlchKeyTransmutation from './alchKeyTransmutation.js';
+import * as AlchWestCodeboxJigsaw from './alchWestCodeboxJigsaw.js';
+import * as AlchNorthHierarchyNote from './alchNorthHierarchyNote.js';
+import * as AlchStatuePose from './alchStatuePose.js';
+import * as AlchEastSlidingLock from './alchEastSlidingLock.js';
+import * as AlchEastDoorSync from './alchEastDoorSync.js';
+import * as AlchLightBeamGrid from './alchLightBeamGrid.js';
+
+import * as TicTacToe from './TicTacToe.js';
+
 import { makeResult } from './fsm.js';
 
 export function initAll() {
-  const coop = Coop.init();
-  const lights = Lights.init();
-  const grid = AlchLightBeamGrid.init();
-  const mortar = AlchMortarEssence.init();
-  const tictactoe = TicTacToe.init();
-  const bookshelf = Bookshelf.init();
-  const candle = CandlePuzzle.init();
-  const wizTable = WizardTransformationTable.init();
-  const merlinScale = MerlinScale.init();
-  const doorSeal = DoorSeal.init();
+  const internal = {
+    // Demo/Legacy
+    coopSwitches: Coop.init(),
+    lightsOut: Lights.init(),
+
+    // Alchemy South
+    alchPortraitBooks: AlchPortraitBooks.init(),
+    alchFlaskTransfer: AlchFlaskTransfer.init(),
+
+    // Alchemy West
+    alchMortarEssence: AlchMortarEssence.init(),
+    alchKeyTransmutation: AlchKeyTransmutation.init(),
+    alchWestCodeboxJigsaw: AlchWestCodeboxJigsaw.init(),
+
+    // Alchemy North
+    alchNorthHierarchyNote: AlchNorthHierarchyNote.init(),
+    alchStatuePose: AlchStatuePose.init(),
+
+    // Alchemy East
+    alchEastSlidingLock: AlchEastSlidingLock.init(),
+    alchEastDoorSync: AlchEastDoorSync.init(),
+    alchLightBeamGrid: AlchLightBeamGrid.init(),
+
+    // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
+    tictactoe_scroll: TicTacToe.init(),
+
+    // Optional shared infra state (for compatibility)
+    processedActions: new Set(),
+  };
 
   return {
     public: {
-      coopSwitches: Coop.exportPublic(coop),
-      lightsOut: Lights.exportPublic(lights),
-      alchLightBeamGrid: AlchLightBeamGrid.exportPublic(grid),
-      alchMortarEssence: AlchMortarEssence.exportPublic(mortar),
-      tictactoe_scroll: TicTacToe.exportPublic(tictactoe),
-      bookshelf_puzzle: Bookshelf.exportPublic(bookshelf),
-      candle_puzzle: CandlePuzzle.exportPublic(candle),
-      wizard_transformation_table: WizardTransformationTable.exportPublic(wizTable),
-      merlin_scale: MerlinScale.exportPublic(merlinScale),
-      door_seal: DoorSeal.exportPublic(doorSeal),
-    },
-    internal: {
-      coopSwitches: coop,
-      lightsOut: lights,
-      alchLightBeamGrid: grid,
-      alchMortarEssence: mortar,
-      tictactoe_scroll: tictactoe,
-      bookshelf_puzzle: bookshelf,
-      candle_puzzle: candle,
-      wizard_transformation_table: wizTable,
-      merlin_scale: merlinScale,
-      door_seal: doorSeal,
+      // Demo/Legacy
+      coopSwitches: Coop.exportPublic(internal.coopSwitches),
+      lightsOut: Lights.exportPublic(internal.lightsOut),
 
-      processedActions: new Set(), 
-    }
+      // Alchemy South
+      alchPortraitBooks: AlchPortraitBooks.exportPublic(internal.alchPortraitBooks),
+      alchFlaskTransfer: AlchFlaskTransfer.exportPublic(internal.alchFlaskTransfer),
+
+      // Alchemy West
+      alchMortarEssence: AlchMortarEssence.exportPublic(internal.alchMortarEssence),
+      alchKeyTransmutation: AlchKeyTransmutation.exportPublic(internal.alchKeyTransmutation),
+      alchWestCodeboxJigsaw: AlchWestCodeboxJigsaw.exportPublic(internal.alchWestCodeboxJigsaw),
+
+      // Alchemy North
+      alchNorthHierarchyNote: AlchNorthHierarchyNote.exportPublic(internal.alchNorthHierarchyNote),
+      alchStatuePose: AlchStatuePose.exportPublic(internal.alchStatuePose),
+
+      // Alchemy East
+      alchEastSlidingLock: AlchEastSlidingLock.exportPublic(internal.alchEastSlidingLock),
+      alchEastDoorSync: AlchEastDoorSync.exportPublic(internal.alchEastDoorSync),
+      alchLightBeamGrid: AlchLightBeamGrid.exportPublic(internal.alchLightBeamGrid),
+
+      // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
+      tictactoe_scroll: TicTacToe.exportPublic(internal.tictactoe_scroll),
+    },
+    internal,
   };
 }
 
 /**
  * action = { actionId, playerId, objectId, verb, data }
  */
-// server/src/puzzles/index.js
-
 export function apply(state, action) {
   const now = Date.now();
 
-  // EMERGENCY GUARD
-  if (!state || !state.public) {
+  // emergency-guard behavior beibehalten
+  if (!state?.public || !state?.internal) {
     state = initAll();
   }
 
-  // handle objectId routing: trigger_ = UI-Element, puzzle_ = Logik
-  if (action.objectId.startsWith('trigger_')) {
-    const widgetResult = routeWidgetTriggers(state, action);
-    if (widgetResult) return widgetResult;
+  const objectId = String(action?.objectId || '');
 
-  } else if (action.objectId.startsWith('puzzle_')) {
-    const puzzleResult = routePuzzleLogic(state, action, now);
-    if (puzzleResult) return puzzleResult;
-
-  } else {
-    return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
+  if (!objectId) {
+    return makeResult({ state, ok: false, error: 'MISSING_OBJECT_ID' });
   }
 
+  // ------------------------------------------------------------
+  // 1) Widget-Triggers (wizard-branch): trigger_*
+  // ------------------------------------------------------------
+  if (objectId.startsWith('trigger_')) {
+    const widgetResult = routeWidgetTriggers(state, action);
+    if (widgetResult) return widgetResult;
+    return makeResult({ state, ok: false, error: 'UNKNOWN_TRIGGER' });
+  }
+
+  // ------------------------------------------------------------
+  // 2) Puzzle-Routing (wizard-branch): puzzle_*
+  // ------------------------------------------------------------
+  if (objectId.startsWith('puzzle_')) {
+    const puzzleResult = routePuzzleLogic(state, action, now);
+    if (puzzleResult) return puzzleResult;
+    return makeResult({ state, ok: false, error: 'UNKNOWN_PUZZLE_OBJECT' });
+  }
+
+  return makeResult({ state, ok: false, error: 'UNKNOWN_OBJECT' });
 }
 
 function routeWidgetTriggers(state, action) {
   const widgetMap = {
-    trigger_tictactoe_scroll: "tictactoe_scroll",
-    trigger_bookshelf: "bookshelf_puzzle",
-    trigger_candle_puzzle: "candle_puzzle",
-    trigger_wiz_hint_candles: "candle_hint",
-    trigger_wiz_hint_recipe: "recipe_hint",
-    trigger_wiz_hint_frame: "frame_hint",
-    trigger_merlin_scale: "merlin_scale",
-    trigger_mortar: "mortar_puzzle",
-    trigger_transmuter: "transmuter_puzzle",
+    trigger_tictactoe_scroll: 'tictactoe_scroll',
+
+    // Alchemy Widget-Aliase (frontend-kompatibel)
+    trigger_mortar: 'mortar_puzzle',
+    trigger_alch_mortar: 'mortar_puzzle',
+
+    trigger_transmuter: 'transmuter_puzzle',
+    trigger_alch_transmuter: 'transmuter_puzzle',
+
+    trigger_portrait_books: 'portrait_books_puzzle',
+    trigger_alch_portrait_books: 'portrait_books_puzzle',
+    trigger_portrait: 'portrait_books_puzzle',
+
+    trigger_flask_transfer: 'flask_transfer_puzzle',
+    trigger_alch_flask_transfer: 'flask_transfer_puzzle',
+    trigger_flasks: 'flask_transfer_puzzle',
+
+    trigger_west_codebox: 'west_codebox_puzzle',
+    trigger_alch_west_codebox: 'west_codebox_puzzle',
+    trigger_west_jigsaw: 'west_codebox_puzzle',
+
+    trigger_north_hierarchy_note: 'north_hierarchy_note_puzzle',
+    trigger_alch_north_hierarchy_note: 'north_hierarchy_note_puzzle',
+    trigger_hierarchy_note: 'north_hierarchy_note_puzzle',
+
+    trigger_statue_pose: 'statue_pose_puzzle',
+    trigger_alch_statue_pose: 'statue_pose_puzzle',
+    trigger_statue: 'statue_pose_puzzle',
+
+    trigger_east_sliding_lock: 'east_sliding_lock_puzzle',
+    trigger_alch_east_sliding_lock: 'east_sliding_lock_puzzle',
+
+    trigger_east_door_sync: 'east_door_sync_puzzle',
+    trigger_alch_east_door_sync: 'east_door_sync_puzzle',
+    trigger_east_door: 'east_door_sync_puzzle',
+
+    trigger_light_beam_grid: 'light_beam_grid_puzzle',
+    trigger_alch_light_beam_grid: 'light_beam_grid_puzzle',
+    trigger_mirror_grid: 'light_beam_grid_puzzle',
   };
 
-  const widget = widgetMap[action.objectId];
-
+  const widget = widgetMap[String(action?.objectId || '')];
   if (!widget) return null;
 
-  return {
+  return makeResult({
+    state,
     ok: true,
-    nextState: state,
-    diff: {
-      activeWidget: widget
-    }
-  };
+    error: null,
+    diff: { activeWidget: widget },
+  });
 }
 
 function routePuzzleLogic(state, action, now) {
+  const oid = String(action?.objectId || '');
+
   const puzzleMap = {
+    // Legacy
+    puzzle_coop_switches: ['coopSwitches', Coop],
+    puzzle_lights_out: ['lightsOut', Lights],
+
+    // TicTacToe (Wizard-Teil, pre-merge bereits aktiv)
     puzzle_tictactoe_scroll: ['tictactoe_scroll', TicTacToe],
-    puzzle_bookshelf: ['bookshelf_puzzle', Bookshelf],
-    puzzle_candle: ['candle_puzzle', CandlePuzzle],
-    puzzle_wizard_transformation_table: ['wizard_transformation_table', WizardTransformationTable],
-    puzzle_merlin_scale: ['merlin_scale', MerlinScale],
-    puzzle_door_seal: ['door_seal', DoorSeal],
+
+    // Alchemy via puzzle_ prefix
     puzzle_light_beam_grid: ['alchLightBeamGrid', AlchLightBeamGrid],
-    puzzle_mortar: ['alchMortarEssence', AlchMortarEssence]
+    puzzle_mortar: ['alchMortarEssence', AlchMortarEssence],
+    puzzle_transmuter: ['alchKeyTransmutation', AlchKeyTransmutation],
+    puzzle_west_codebox: ['alchWestCodeboxJigsaw', AlchWestCodeboxJigsaw],
+    puzzle_portrait_books: ['alchPortraitBooks', AlchPortraitBooks],
+    puzzle_flask_transfer: ['alchFlaskTransfer', AlchFlaskTransfer],
+    puzzle_north_hierarchy_note: ['alchNorthHierarchyNote', AlchNorthHierarchyNote],
+    puzzle_statue_pose: ['alchStatuePose', AlchStatuePose],
+    puzzle_east_sliding_lock: ['alchEastSlidingLock', AlchEastSlidingLock],
+    puzzle_east_door_sync: ['alchEastDoorSync', AlchEastDoorSync],
   };
 
-  if (puzzleMap[action.objectId]) {
-    const [key, PuzzleClass] = puzzleMap[action.objectId];
-    return runPuzzle(state, key, PuzzleClass, action, now);
-  }
+  const hit = puzzleMap[oid];
+  if (!hit) return null;
 
-  return null;
+  const [key, moduleRef] = hit;
+  const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
+  const puzzleAction = canonicalObjectId
+    ? { ...action, objectId: canonicalObjectId }
+    : action;
+
+  return runPuzzle(state, key, moduleRef, puzzleAction, now);
 }
-
-function runPuzzle(state, key, module, action, now) {
-  const localState = state.internal[key];
+function runPuzzle(state, key, moduleRef, action, now) {
+  const localState = state?.internal?.[key];
   if (!localState) {
     return makeResult({ state, ok: false, error: `MISSING_PUZZLE_STATE:${key}` });
   }
 
-  const res = module.apply(localState, action, now);
-  if (!res.ok) return res;
+  // Übergibt zusätzlich globalen state als 5. Parameter (branch1 kompatibel)
+  const res = moduleRef.apply(localState, action, now, state);
+
+  if (!res?.ok) {
+    // Manche Module liefern bereits ein vollständiges makeResult-artiges Objekt
+    if (res && (res.state || res.nextState)) return res;
+    return makeResult({ state, ok: false, error: res?.error || 'PUZZLE_APPLY_FAILED' });
+  }
+
+  const nextLocalState = res.nextState ?? res.state;
+  if (!nextLocalState) {
+    return makeResult({ state, ok: false, error: `INVALID_PUZZLE_RESULT:${key}` });
+  }
 
   const next = cloneState(state);
-  next.internal[key] = res.nextState;
-  next.public[key] = module.exportPublic(res.nextState);
+  next.internal[key] = nextLocalState;
+  next.public[key] = moduleRef.exportPublic(nextLocalState);
 
   const diff =
     res.diff && Object.keys(res.diff).length > 0
       ? res.diff
       : { [key]: next.public[key] };
 
-  return makeResult({ state: next, diff });
+  return makeResult({ state: next, diff, ok: true, error: null });
 }
 
-function cloneState(s) {
+function cloneState(state) {
   return {
-    // Deep clone the nested public objects
-    public: JSON.parse(JSON.stringify(s.public)), 
-    
-    // Internal usually contains Sets or Maps which JSON.stringify breaks,
-    // so we handle them specifically:
+    public: JSON.parse(JSON.stringify(state.public)),
     internal: {
-      ...s.internal,
-      processedActions: new Set(s.internal.processedActions || [])
-    }
+      ...state.internal,
+      processedActions: new Set(state.internal?.processedActions || []),
+    },
   };
 }

@@ -80,6 +80,7 @@ export class RoomManager {
           viewIndex: 0, // 0=N, 1=E, 2=S, 3=W
           roomType: roomName, // for client to pick images
           views: getRoomViews(roomName),
+          alchDoorState: null,
           inventory: toPublicInventory(starterBag),
         },
         internal: {
@@ -89,6 +90,12 @@ export class RoomManager {
       },
     };
 
+    const initialDoorState = this._deriveAlchemistDoorStateFromPublic(room.state.public);
+    room.state.public.alchDoorState = initialDoorState;
+    room.state.public.doorState = {
+      opened: !!initialDoorState.open,
+      updatedAt: initialDoorState.updatedAt,
+    };
     this.rooms.set(id, room);
     this._saveSnapshot(id).catch(() => {});
     this._persistLocal(id);
@@ -238,9 +245,7 @@ export class RoomManager {
     if (!room.started) return { ok: false, error: 'ROOM_NOT_RUNNING' };
     if (room.completed) return { ok: false, error: 'ROOM_ALREADY_COMPLETED' };
 
-    ensureInventory(room);
-
-    console.log("Applying action in room", id, action);
+    this._ensureInventory(room);
 
     // 1) Normalize + Inventory-Precheck (ohne zu konsumieren)
     const normalizedAction = normalizeActionItems(action);
@@ -249,7 +254,8 @@ export class RoomManager {
 
     // 2) Delegation an Puzzle-Engine (deterministisch)
     const prevPublic = room.state.public;
-    const res = Puzzles.apply(room.state, normalizedAction);
+    const puzzleAction = toPuzzleRoutingAction(normalizedAction);
+    const res = Puzzles.apply(room.state, puzzleAction);
     if (!res.ok) return { ok: false, error: res.error || 'INVALID_ACTION' };
 
     // 3) Autoritativen Zustand übernehmen
@@ -257,10 +263,7 @@ export class RoomManager {
     ensureInventory(room);
 
     // 4) Inventory-Bridge (consume + rewards)
-    const invChanged = applyInventoryBridge(room, prevPublic, normalizedAction);
-
-    // 5) GLOBAL TRIGGERS (The logic for the door)
-    const triggerDiff = this._checkGlobalTriggers(room);
+    const invChanged = this._applyInventoryBridge(room, prevPublic, normalizedAction);
 
     this._touchSeq(room);
     this._saveSnapshot(id).catch(() => {});
@@ -295,20 +298,282 @@ export class RoomManager {
       const gameSolved = pub.scroll_grid.solved;
       const alreadyOpen = pub.door_seal.openable;
 
-      if (keyInserted && gameSolved && !alreadyOpen) {
-        console.log("Global Trigger: Door Seal Opening!");
-        
-        // Update Internal & Public state
-        room.state.internal.door_seal.openable = true;
-        room.state.public.door_seal.openable = true;
-        
-        // Add to diff so client reacts immediately
-        diff.door_seal = { ...pub.door_seal, openable: true };
+    if (!room.state.internal.inventory) {
+      const fromPub = fromPublicInventory(room.state.public.inventory);
+      room.state.internal.inventory =
+        Object.keys(fromPub).length > 0 ? fromPub : cloneBag(STARTER_INVENTORY);
+    }
+
+    room.state.public.inventory = toPublicInventory(room.state.internal.inventory);
+  }
+
+  _normalizeActionItems(action) {
+    if (!action) return action;
+
+    const canonicalObjectId = normalizeObjectId(action.objectId, action.verb);
+    let next = canonicalObjectId !== action.objectId
+      ? { ...action, objectId: canonicalObjectId }
+      : action;
+
+    if (!next?.data?.item) return next;
+    const normalizedItem = normalizeItem(next.data.item);
+    if (!normalizedItem) return next; // Puzzle-Validation kann INVALID_ITEM liefern
+
+    if (normalizedItem === next.data.item) return next;
+
+    return {
+      ...next,
+      data: { ...next.data, item: normalizedItem },
+    };
+  }
+
+_precheckInventoryForAction(room, action) {
+  // Alchemie-Insert-Checks
+  if (action?.verb === 'insert') {
+    const isAlchemyInsert =
+      action.objectId === 'alch:mortar' ||
+      action.objectId === 'alch:transmuter' ||
+      action.objectId === 'alch:east-door-lock';
+
+    if (isAlchemyInsert) {
+      const item = normalizeItem(action?.data?.item);
+      if (!item) return { ok: true }; // Puzzle-Validation übernimmt
+
+      if (!bagHas(room.state.internal.inventory, item, 1)) {
+        return { ok: false, error: 'INVENTORY_ITEM_MISSING' };
       }
     }
 
     return diff;
   }
+  return { ok: true };
+}
+
+
+_ensureDoorState(room) {
+  const pub = room?.state?.public;
+  if (!pub) return;
+
+  if (!pub.alchDoorState) {
+    const next = this._deriveAlchemistDoorStateFromPublic(pub);
+    pub.alchDoorState = next;
+    pub.doorState = {
+      opened: !!next.open,
+      updatedAt: next.updatedAt,
+    };
+    return;
+  }
+
+  this._deriveAlchemistDoorState(room);
+}
+
+_deriveAlchemistDoorStateFromPublic(pub) {
+  const sliding = pub?.alchEastSlidingLock || {};
+  const doorSync = pub?.alchEastDoorSync || {};
+  const lightBeam = pub?.alchLightBeamGrid || {};
+
+  const lockVisible = !!(
+    sliding?.output?.lockVisible ??
+    sliding?.lockVisible ??
+    sliding?.solved
+  );
+
+  const keyInserted = !!(
+    doorSync?.output?.keyInserted ??
+    doorSync?.keyInserted
+  );
+
+  const runesActivated = !!(
+    doorSync?.output?.runesActivated ??
+    doorSync?.runesActivated ??
+    lightBeam?.solved
+  );
+
+  const mechanismTriggered = !!(
+    doorSync?.output?.mechanismTriggered ??
+    doorSync?.mechanismTriggered ??
+    doorSync?.output?.opened ??
+    doorSync?.opened ??
+    doorSync?.doorOpen
+  );
+
+  const doorOpenBySync = !!(
+    doorSync?.output?.opened ??
+    doorSync?.opened ??
+    doorSync?.output?.doorOpen ??
+    doorSync?.doorOpen
+  );
+
+  const open = doorOpenBySync || (lockVisible && keyInserted && runesActivated && mechanismTriggered);
+
+  return {
+    lockVisible,
+    keyInserted,
+    runesActivated,
+    mechanismTriggered,
+    open,
+    updatedAt: Date.now(),
+  };
+}
+
+_deriveAlchemistDoorState(room) {
+  const pub = room?.state?.public;
+  if (!pub) return false;
+
+  const prev = pub.alchDoorState || null;
+  const next = this._deriveAlchemistDoorStateFromPublic(pub);
+  pub.alchDoorState = next;
+  pub.doorState = {
+    opened: !!next.open,
+    updatedAt: next.updatedAt,
+  };
+
+  if (!prev) return true;
+  return JSON.stringify(prev) !== JSON.stringify(next);
+}
+
+_updateAlchemistDoorState(room, action) {
+  const objectId = action?.objectId;
+  const watched = new Set([
+    'alch:east-sliding-lock',
+    'alch:east-door-lock',
+    'alch:east-door-sync',
+    'alch:east-door',
+    'alch:east-door-switch',
+    'alch:east-door-mechanism',
+    'alch:east:door',
+    'alch:east:sync-switch',
+    'alch:mirror-grid',
+    'alch:lightbeam-grid',
+    'alch:east-lightbeam',
+    'alch:door',
+    'alch:final-door',
+  ]);
+
+  if (!watched.has(objectId)) return false;
+  return this._deriveAlchemistDoorState(room);
+}
+
+_applyInventoryBridge(room, prevPublic, action) {
+  let changed = false;
+  const bag = room.state.internal.inventory;
+
+  // A) Verbrauch bei erfolgreichem insert in Alchemie-Puzzles
+  if (
+    action?.verb === 'insert' &&
+    (
+      action.objectId === 'alch:mortar' ||
+      action.objectId === 'alch:transmuter' ||
+      action.objectId === 'alch:east-door-lock'
+    )
+  ) {
+    const item = normalizeItem(action?.data?.item);
+    const canConsume =
+      action.objectId === 'alch:east-door-lock'
+        ? item === 'GOLDEN_KEY'
+        : !!item;
+
+    if (canConsume && item && bagHas(bag, item, 1)) {
+      bagRemove(bag, item, 1);
+      changed = true;
+    }
+  }
+
+  // B) Reward: BLUE_LIQUID wenn Mörser erstmals ready
+  const prevBlue = !!prevPublic?.alchMortarEssence?.output?.blueLiquidReady;
+  const nextBlue = !!room.state.public?.alchMortarEssence?.output?.blueLiquidReady;
+  if (!prevBlue && nextBlue) {
+    bagAdd(bag, 'BLUE_LIQUID', 1);
+    changed = true;
+  }
+
+  // C) Reward: GOLDEN_KEY wenn Transmuter erstmals ready
+  const prevKey = !!prevPublic?.alchKeyTransmutation?.output?.goldenKeyReady;
+  const nextKey = !!room.state.public?.alchKeyTransmutation?.output?.goldenKeyReady;
+  if (!prevKey && nextKey) {
+    bagAdd(bag, 'GOLDEN_KEY', 1);
+    changed = true;
+  }
+
+  // D) Spiegelpuzzle: Kristall bei mount verbrauchen, bei unmount (vor solve) zurückgeben
+  const prevGridSolved = !!prevPublic?.alchLightBeamGrid?.solved;
+  const nextGridSolved = !!room.state.public?.alchLightBeamGrid?.solved;
+
+  if (!prevGridSolved && nextGridSolved) {
+    bagAdd(bag, 'LIGHT_SIGIL', 1);
+    changed = true;
+  }
+
+  // E) Reward bei erstmaligem Solve des Spiegelpuzzles
+  const prevMirrorSolved = !!prevPublic?.alchLightBeamMirrors?.solved;
+  const nextMirrorSolved = !!room.state.public?.alchLightBeamMirrors?.solved;
+  if (!prevMirrorSolved && nextMirrorSolved) {
+    bagAdd(bag, 'LIGHT_SIGIL', 1); // kann später fürs Tür-/Finalrätsel genutzt werden
+    changed = true;
+  }
+
+  // F) South Reward: Portrait (FEATHER + GOLD_NUGGET)
+  const prevPortrait = prevPublic?.alchPortraitBooks ?? {};
+  const nextPortrait = room.state.public?.alchPortraitBooks ?? {};
+  const prevPortraitSolved = !!prevPortrait?.solved;
+  const nextPortraitSolved = !!nextPortrait?.solved;
+
+  const prevFeather = !!prevPortrait?.output?.featherReady;
+  const nextFeather = !!nextPortrait?.output?.featherReady;
+  if ((!prevFeather && nextFeather) || (!prevPortraitSolved && nextPortraitSolved && !nextFeather)) {
+    bagAdd(bag, 'FEATHER', 1);
+    changed = true;
+  }
+
+  const prevGoldNugget = !!prevPortrait?.output?.goldNuggetReady;
+  const nextGoldNugget = !!nextPortrait?.output?.goldNuggetReady;
+  if ((!prevGoldNugget && nextGoldNugget) || (!prevPortraitSolved && nextPortraitSolved && !nextGoldNugget)) {
+    bagAdd(bag, 'GOLD_NUGGET', 1);
+    changed = true;
+  }
+
+  // G) South Reward: Flask (COAL_BLOCK, MOONWORT, MATCHES, GREEN_LIQUID)
+  const prevFlask = prevPublic?.alchFlaskTransfer ?? {};
+  const nextFlask = room.state.public?.alchFlaskTransfer ?? {};
+  const prevFlaskOut = prevFlask?.output ?? {};
+  const nextFlaskOut = nextFlask?.output ?? {};
+  const prevFlaskSolved = !!prevFlask?.solved;
+  const nextFlaskSolved = !!nextFlask?.solved;
+
+  const prevCoal = !!prevFlaskOut?.coalBlockReady || !!prevFlaskOut?.coalReady;
+  const nextCoal = !!nextFlaskOut?.coalBlockReady || !!nextFlaskOut?.coalReady;
+  if ((!prevCoal && nextCoal) || (!prevFlaskSolved && nextFlaskSolved && !nextCoal)) {
+    bagAdd(bag, 'COAL_BLOCK', 1);
+    changed = true;
+  }
+
+  const prevMoonwort = !!prevFlaskOut?.moonwortReady;
+  const nextMoonwort = !!nextFlaskOut?.moonwortReady;
+  if ((!prevMoonwort && nextMoonwort) || (!prevFlaskSolved && nextFlaskSolved && !nextMoonwort)) {
+    bagAdd(bag, 'MOONWORT', 1);
+    changed = true;
+  }
+
+  const prevMatches = !!prevFlaskOut?.matchesReady;
+  const nextMatches = !!nextFlaskOut?.matchesReady;
+  if ((!prevMatches && nextMatches) || (!prevFlaskSolved && nextFlaskSolved && !nextMatches)) {
+    bagAdd(bag, 'MATCHES', 1);
+    changed = true;
+  }
+
+  const prevGreen = !!prevFlaskOut?.greenLiquidReady;
+  const nextGreen = !!nextFlaskOut?.greenLiquidReady;
+  if ((!prevGreen && nextGreen) || (!prevFlaskSolved && nextFlaskSolved && !nextGreen)) {
+    bagAdd(bag, 'GREEN_LIQUID', 1);
+    changed = true;
+  }
+
+  if (changed) {
+    room.state.public.inventory = toPublicInventory(bag);
+  }
+
+  return changed;
+}
 
   // ----------------------------------------------------------
   // Interne Helfer
@@ -374,6 +639,12 @@ export class RoomManager {
     // inventory im public-state sichern
     room.state.public.inventory = toPublicInventory(room.state.internal.inventory);
 
+    const restoredDoorState = this._deriveAlchemistDoorStateFromPublic(room.state.public);
+    room.state.public.alchDoorState = restoredDoorState;
+    room.state.public.doorState = {
+      opened: !!restoredDoorState.open,
+      updatedAt: restoredDoorState.updatedAt,
+    };
     this.rooms.set(id, room);
     return room;
   }
@@ -477,3 +748,157 @@ function defaultCompletionPredicate(state) {
   }
 }
 
+// ------------------------------------------------------------
+// Inventory utilities
+// ------------------------------------------------------------
+function normalizeObjectId(objectId, verb) {
+  const oid = String(objectId ?? '').trim();
+  const v = String(verb ?? '').trim().toLowerCase();
+
+  if (oid === 'alch:portrait' || oid === 'alch:portrait-lady') return 'alch:portrait-books';
+  if (oid === 'alch:flasks' || oid === 'alch:flask-shelf') return 'alch:flask-transfer';
+  if (oid === 'alch:ritual-paper') return 'alch:transmuter';
+  if (oid === 'alch:hierarchy-note' || oid === 'alch:note-drawer') return 'alch:north-hierarchy-note';
+  if (oid === 'alch:statue-pose') return 'alch:statue';
+
+  if (oid === 'alch:lightbeam-grid' || oid === 'alch:east-lightbeam') return 'alch:mirror-grid';
+
+  if (oid === 'alch:east-door-sync' || oid === 'alch:east:sync-switch') {
+    return v === 'insert' ? 'alch:east-door-lock' : 'alch:east-door-switch';
+  }
+  if (oid === 'alch:east-door' || oid === 'alch:east:door') {
+    return v === 'insert' ? 'alch:east-door-lock' : 'alch:east-door-mechanism';
+  }
+
+  return oid;
+}
+
+function toPuzzleRoutingAction(action) {
+  if (!action) return action;
+
+  const objectId = String(action.objectId ?? '').trim();
+  if (!objectId) return action;
+  if (objectId.startsWith('trigger_')) {
+    return action;
+  }
+  if (objectId.startsWith('puzzle_')) {
+    if (action.canonicalObjectId) return action;
+
+    const verb = String(action.verb ?? '').trim().toLowerCase();
+    const puzzleCanonicalMap = {
+      puzzle_mortar: 'alch:mortar',
+      puzzle_transmuter: 'alch:transmuter',
+      puzzle_west_codebox: 'alch:west-codebox',
+      puzzle_portrait_books: 'alch:portrait-books',
+      puzzle_flask_transfer: 'alch:flask-transfer',
+      puzzle_north_hierarchy_note: 'alch:north-hierarchy-note',
+      puzzle_statue_pose: 'alch:statue',
+      puzzle_east_sliding_lock: 'alch:east-sliding-lock',
+      puzzle_light_beam_grid: 'alch:mirror-grid',
+    };
+
+    if (objectId === 'puzzle_east_door_sync') {
+      return {
+        ...action,
+        canonicalObjectId: verb === 'insert' ? 'alch:east-door-lock' : 'alch:east-door-switch',
+      };
+    }
+
+    const canonicalObjectId = puzzleCanonicalMap[objectId];
+    return canonicalObjectId ? { ...action, canonicalObjectId } : action;
+  }
+
+  if (objectId.startsWith('switch:')) {
+    return { ...action, objectId: 'puzzle_coop_switches', canonicalObjectId: objectId };
+  }
+  if (objectId.startsWith('light:')) {
+    return { ...action, objectId: 'puzzle_lights_out', canonicalObjectId: objectId };
+  }
+
+  if (objectId === 'alch:portrait-books') {
+    return { ...action, objectId: 'puzzle_portrait_books', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:flask-transfer') {
+    return { ...action, objectId: 'puzzle_flask_transfer', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:mortar') {
+    return { ...action, objectId: 'puzzle_mortar', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:transmuter') {
+    return { ...action, objectId: 'puzzle_transmuter', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:west-codebox' || objectId === 'alch:west-jigsaw') {
+    return { ...action, objectId: 'puzzle_west_codebox', canonicalObjectId: 'alch:west-codebox' };
+  }
+  if (objectId === 'alch:north-hierarchy-note') {
+    return { ...action, objectId: 'puzzle_north_hierarchy_note', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:statue') {
+    return { ...action, objectId: 'puzzle_statue_pose', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:east-sliding-lock') {
+    return { ...action, objectId: 'puzzle_east_sliding_lock', canonicalObjectId: objectId };
+  }
+  if (
+    objectId === 'alch:east-door-lock' ||
+    objectId === 'alch:east-door-switch' ||
+    objectId === 'alch:east-door-mechanism'
+  ) {
+    return { ...action, objectId: 'puzzle_east_door_sync', canonicalObjectId: objectId };
+  }
+  if (objectId === 'alch:mirror-grid') {
+    return { ...action, objectId: 'puzzle_light_beam_grid', canonicalObjectId: objectId };
+  }
+
+  return action;
+}
+
+function normalizeItem(input) {
+  const raw = String(input ?? '').trim().toUpperCase();
+
+  if (['MOONWORT', 'MONDRAUTE', 'BOTRYCHIUM_LUNARIA', 'BOTRYCHIUM LUNARIA'].includes(raw)) return 'MOONWORT';
+  if (['GREEN_LIQUID', 'GREENLIQUID', 'GRÜNE_FLÜSSIGKEIT', 'GRUENE_FLUESSIGKEIT'].includes(raw)) return 'GREEN_LIQUID';
+  if (['BLUE_LIQUID', 'BLUELIQUID', 'BLAUE_FLÜSSIGKEIT', 'BLAUE_FLUESSIGKEIT'].includes(raw)) return 'BLUE_LIQUID';
+  if (['GOLD_NUGGET', 'GOLDNUGGET', 'GOLDKLUMPEN', 'RAW_KEY_MATERIAL'].includes(raw)) return 'GOLD_NUGGET';
+  if (['GOLDEN_KEY', 'GOLDENKEY', 'GOLDENER_SCHLUESSEL', 'GOLDENER_SCHLÜSSEL'].includes(raw)) return 'GOLDEN_KEY';
+  if (['PURIFIED_CRYSTAL', 'CRYSTAL', 'REINER_KRISTALL', 'GEREINIGTER_KRISTALL'].includes(raw)) return 'PURIFIED_CRYSTAL';
+  if (['LIGHT_SIGIL', 'LIGHTSIGIL', 'LICHT_SIGIL', 'LICHTSIGIL'].includes(raw)) return 'LIGHT_SIGIL';
+
+  return null;
+}
+
+function cloneBag(bag) {
+  return { ...(bag || {}) };
+}
+
+function bagHas(bag, item, amount = 1) {
+  return Number(bag?.[item] || 0) >= amount;
+}
+
+function bagAdd(bag, item, amount = 1) {
+  bag[item] = Number(bag[item] || 0) + amount;
+}
+
+function bagRemove(bag, item, amount = 1) {
+  const next = Number(bag[item] || 0) - amount;
+  if (next > 0) bag[item] = next;
+  else delete bag[item];
+}
+
+function toPublicInventory(bag) {
+  const items = Object.entries(bag || {})
+    .filter(([, count]) => Number(count) > 0)
+    .map(([item, count]) => ({ item, count: Number(count) }))
+    .sort((a, b) => a.item.localeCompare(b.item));
+
+  return { items };
+}
+
+function fromPublicInventory(publicInventory) {
+  const bag = {};
+  for (const entry of publicInventory?.items || []) {
+    if (!entry?.item) continue;
+    bag[String(entry.item)] = Number(entry.count || 0);
+  }
+  return bag;
+}

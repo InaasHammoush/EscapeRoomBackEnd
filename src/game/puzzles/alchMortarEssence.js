@@ -33,11 +33,11 @@ export function apply(state, action) {
     return fail(state, 'INVALID_OBJECT');
   }
 
-  const verb = action.verb;
+  const verb = String(action?.verb ?? '').trim().toLowerCase();
   const next = clone(state);
 
   // Handle INTERACT verb to open the popup
-  if (verb === 'INTERACT') {
+  if (verb === 'interact') {
     return makeResult({
       state: next,
       diff: {
