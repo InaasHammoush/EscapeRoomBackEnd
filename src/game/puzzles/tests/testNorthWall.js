@@ -1,7 +1,7 @@
 // src/tests/testNorthWall.js
 import assert from 'node:assert/strict';
-import * as Note from '../alchNorthHierarchyNote.js';
-import * as Statue from '../alchStatuePose.js';
+import * as Note from '../alchemist_lab/alchNorthHierarchyNote.js';
+import * as Statue from '../alchemist_lab/alchStatuePose.js';
 
 const nextState = (res) => res?.nextState ?? res?.state;
 

@@ -1,7 +1,7 @@
 // src/tests/testWestWallFlow.js
 import assert from 'node:assert/strict';
-import * as WestBox from '../alchWestCodeboxJigsaw.js';
-import * as Ritual from '../alchKeyTransmutation.js';
+import * as WestBox from '../alchemist_lab/alchWestCodeboxJigsaw.js';
+import * as Ritual from '../alchemist_lab/alchKeyTransmutation.js';
 
 function nextOf(res) {
   return res?.nextState ?? res?.state;

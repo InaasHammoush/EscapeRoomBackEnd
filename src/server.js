@@ -214,11 +214,12 @@ io.on('connection', (socket) => {
   // Interaktion mit einem Objekt/Hotspot (Puzzle-Engine)
   onSafe(socket, 'interact', schemas.Interact, async (payload, cb) => {
     console.log("INTERACT payload received:", payload);
-    const { roomId, actionId, objectId, verb, data } = payload;
+    const { roomId, actionId, objectId, canonicalObjectId, verb, data } = payload;
     const result = rooms.applyAction(roomId, {
       actionId,
       playerId: socket.id,
       objectId,
+      canonicalObjectId,
       verb,
       data
     });
