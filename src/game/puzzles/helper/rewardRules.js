@@ -13,7 +13,7 @@ export const REWARD_RULES = [
     item: 'NOTE_RUNES'
   },
   {
-    puzzle: 'wizard_transformation_table',
+    puzzle: 'transformation_table_puzzle',
     check: (prev, next) => !prev.keyTaken && next.keyTaken,
     item: 'ASH_KEY'
   },

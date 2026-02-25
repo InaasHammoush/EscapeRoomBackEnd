@@ -2,9 +2,9 @@
 
 export const CONSUMPTION_RULES = [
   // --- Wizard ---
-  { objectId: 'puzzle_wizard_transformation_table', verb: 'PLACE',    item: 'WHITE_ROSE' },
-  { objectId: 'puzzle_wizard_transformation_table', verb: 'SPRINKLE', item: 'BLUE_POWDER' },
-  { objectId: 'puzzle_door_seal',                   verb: 'INSERT',   item: 'ASH_KEY' },
+  { objectId: 'puzzle_transformation_table', verb: 'PLACE',    item: 'WHITE_ROSE' },
+  { objectId: 'puzzle_transformation_table', verb: 'SPRINKLE', item: 'BLUE_POWDER' },
+  { objectId: 'puzzle_door_seal',            verb: 'INSERT',   item: 'ASH_KEY' },
 
   // --- Alchemist ---
   // check for "alch:mortar" and consume "MOONWORT"

@@ -20,7 +20,7 @@ import * as AlchLightBeamGrid from './alchemist_lab/alchLightBeamGrid.js';
 import * as TicTacToe from './wizard_library/TicTacToe.js';
 import * as Bookshelf from './wizard_library/Bookshelf.js';
 import * as CandlePuzzle from './wizard_library/CandlePuzzle.js';
-import * as WizardTransformationTable from './wizard_library/WizTransformationPuzzle.js';
+import * as transformationTable from './wizard_library/TransformationTable.js';
 import * as MerlinScale from './wizard_library/MerlinScale.js';
 import * as DoorSeal from './wizard_library/DoorSeal.js';
 
@@ -51,7 +51,7 @@ export function initAll() {
     tictactoe_scroll: TicTacToe.init(),
     bookshelf_puzzle: Bookshelf.init(),
     candle_puzzle: CandlePuzzle.init(),
-    wizard_transformation_table: WizardTransformationTable.init(),
+    transformation_table_puzzle: transformationTable.init(),
     merlin_scale: MerlinScale.init(),
     door_seal: DoorSeal.init(),
 
@@ -83,7 +83,7 @@ export function initAll() {
       tictactoe_scroll: TicTacToe.exportPublic(internal.tictactoe_scroll),
       bookshelf_puzzle: Bookshelf.exportPublic(internal.bookshelf_puzzle),
       candle_puzzle: CandlePuzzle.exportPublic(internal.candle_puzzle),
-      wizard_transformation_table: WizardTransformationTable.exportPublic(internal.wizard_transformation_table),
+      transformation_table: transformationTable.exportPublic(internal.transformation_table),
       merlin_scale: MerlinScale.exportPublic(internal.merlin_scale),
       door_seal: DoorSeal.exportPublic(internal.door_seal),
     },
@@ -134,6 +134,7 @@ function routeWidgetTriggers(state, action) {
     trigger_wiz_hint_recipe: "recipe_hint",
     trigger_wiz_hint_frame: "frame_hint",
     trigger_merlin_scale: "merlin_scale",
+    trigger_transformation_table: "transformation_table_puzzle",
 
     // --- ALCHEMIST ---
     trigger_mortar: 'mortar_puzzle',
@@ -197,7 +198,7 @@ function routePuzzleLogic(state, action, now) {
     puzzle_tictactoe_scroll:            ['tictactoe_scroll', TicTacToe],
     puzzle_bookshelf:                   ['bookshelf_puzzle', Bookshelf],
     puzzle_candle:                      ['candle_puzzle', CandlePuzzle],
-    puzzle_wizard_transformation_table: ['wizard_transformation_table', WizardTransformationTable],
+    puzzle_transformation_table:        ['transformation_table_puzzle', transformationTable],
     puzzle_merlin_scale:                ['merlin_scale', MerlinScale],
     puzzle_door_seal:                   ['door_seal', DoorSeal],
 

@@ -1,7 +1,7 @@
 // src/game/puzzles/wizard_library/WizTransformationPuzzle.js
 import { makeResult } from '../fsm.js';
 
-const PUZZLE_KEY = 'wizard_transformation_table';
+const PUZZLE_KEY = 'transformation_table_puzzle';
 const REQUIRED_SCRAPS = ["Flamma", "Purificat"];
 
 export function init() {
