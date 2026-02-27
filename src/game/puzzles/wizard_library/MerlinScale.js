@@ -1,12 +1,5 @@
 // src/game/puzzles/merlinScale.js
 
-// Frontend intent Example: Dragging the Magic Wand to the Left Tray
-// {
-//   objectId: 'merlin_scale',
-//   verb: 'MOVE',
-//   data: { item: 'WAND', to: 'LEFT' }
-// }
-
 import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'merlin_scale';
@@ -55,9 +48,9 @@ export function apply(state, action) {
   if (to === 'FLOATING') next.floating.push(item);
 
   // 3. Check Win Condition
-  // Group A: Wand & Stone | Group B: Horn & Dragon Scale
-  const hasGroupA = (arr) => arr.includes('WAND') && arr.includes('STONE') && arr.length === 2;
-  const hasGroupB = (arr) => arr.includes('HORN') && arr.includes('DRAGON_SCALE') && arr.length === 2;
+  // Group A: Wand & Dragon Scale | Group B: Horn & Stone
+  const hasGroupA = (arr) => arr.includes('WAND') && arr.includes('DRAGON_SCALE') && arr.length === 2;
+  const hasGroupB = (arr) => arr.includes('HORN') && arr.includes('STONE') && arr.length === 2;
 
   // It doesn't matter which side Group A or B is on, as long as they balance each other out
   const isBalanced = (hasGroupA(next.left) && hasGroupB(next.right)) || 
