@@ -23,6 +23,8 @@ import * as CandlePuzzle from './wizard_library/CandlePuzzle.js';
 import * as transformationTable from './wizard_library/TransformationTable.js';
 import * as MerlinScale from './wizard_library/MerlinScale.js';
 import * as DoorSeal from './wizard_library/DoorSeal.js';
+import * as VasePuzzle from './wizard_library/VasePuzzle.js';
+import * as RecipeHint from './wizard_library/RecipeHint.js';
 
 import { makeResult } from './fsm.js';
 
@@ -53,6 +55,8 @@ export function initAll() {
     candle_puzzle: CandlePuzzle.init(),
     transformation_table_puzzle: transformationTable.init(),
     merlin_scale: MerlinScale.init(),
+    vase_puzzle: VasePuzzle.init(),
+    recipe_hint: RecipeHint.init(),
     door_seal: DoorSeal.init(),
 
     // Infra
@@ -85,6 +89,8 @@ export function initAll() {
       candle_puzzle: CandlePuzzle.exportPublic(internal.candle_puzzle),
       transformation_table: transformationTable.exportPublic(internal.transformation_table),
       merlin_scale: MerlinScale.exportPublic(internal.merlin_scale),
+      vase_puzzle: VasePuzzle.exportPublic(internal.vase_puzzle),
+      recipe_hint: RecipeHint.exportPublic(internal.recipe_hint),
       door_seal: DoorSeal.exportPublic(internal.door_seal),
     },
     internal,
@@ -135,6 +141,7 @@ function routeWidgetTriggers(state, action) {
     trigger_wiz_hint_frame: "frame_hint",
     trigger_merlin_scale: "merlin_scale",
     trigger_transformation_table: "transformation_table_puzzle",
+    trigger_key_vase: "vase_puzzle",
 
     // --- ALCHEMIST ---
     trigger_mortar: 'mortar_puzzle',
@@ -201,6 +208,8 @@ function routePuzzleLogic(state, action, now) {
     puzzle_transformation_table:        ['transformation_table_puzzle', transformationTable],
     puzzle_merlin_scale:                ['merlin_scale', MerlinScale],
     puzzle_door_seal:                   ['door_seal', DoorSeal],
+    puzzle_vase:                        ['vase_puzzle', VasePuzzle],
+    puzzle_recipe_hint:                 ['recipe_hint', RecipeHint],
 
     // --- Alchemist ---
     puzzle_light_beam_grid:      ['alchLightBeamGrid', AlchLightBeamGrid],
