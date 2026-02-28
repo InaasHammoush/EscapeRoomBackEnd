@@ -220,9 +220,16 @@ function routePuzzleLogic(state, action, now) {
   const [key, moduleRef] = hit;
   
   const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
-  const puzzleAction = canonicalObjectId
+  let puzzleAction = canonicalObjectId
     ? { ...action, objectId: canonicalObjectId }
     : action;
+
+  if (oid === 'puzzle_light_beam_grid') {
+    puzzleAction = {
+      ...action,
+      objectId: canonicalObjectId || 'alch:mirror-grid',
+    };
+  }
 
   return runPuzzle(state, key, moduleRef, puzzleAction, now);
 }
