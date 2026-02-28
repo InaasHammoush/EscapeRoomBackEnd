@@ -131,9 +131,21 @@ export function apply(state, action) {
 }
 
 function routeWidgetTriggers(state, action) {
+  const triggerId = String(action?.objectId || '');
+  const tictactoeSolved = !!state?.public?.tictactoe_scroll?.solved;
+
+  if (triggerId === 'trigger_tictactoe_scroll' && tictactoeSolved) {
+    return makeResult({ state, ok: false, error: 'SCROLL_ALREADY_SOLVED' });
+  }
+
+  if (triggerId === 'trigger_door_seal' && !tictactoeSolved) {
+    return makeResult({ state, ok: false, error: 'DOOR_LOCKED_UNTIL_SCROLL_SOLVED' });
+  }
+
   const widgetMap = {
     // --- WIZARD ---
     trigger_tictactoe_scroll: "tictactoe_scroll",
+    trigger_door_seal: "door_seal",
     trigger_bookshelf: "bookshelf_puzzle",
     trigger_candle_puzzle: "candle_puzzle",
     trigger_wiz_hint_candles: "candle_hint",
@@ -182,7 +194,7 @@ function routeWidgetTriggers(state, action) {
     trigger_mirror_grid: 'light_beam_grid_puzzle',
   };
 
-  const widget = widgetMap[String(action?.objectId || '')];
+  const widget = widgetMap[triggerId];
   if (!widget) return null;
 
   return makeResult({
