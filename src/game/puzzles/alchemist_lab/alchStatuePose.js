@@ -5,6 +5,7 @@ const PUZZLE_KEY = 'alchStatuePose';
 const VALID_OBJECTS = new Set([
   'alch:statue',
   'alch:statue-pose',
+  'puzzle_statue_pose',
 ]);
 
 const TARGET_POSE = Object.freeze({
@@ -69,8 +70,8 @@ export function apply(state, action) {
       return makeResult({
         state: next,
         diff: {
-          [PUZZLE_KEY]: exportPublic(next),
           activeWidget: 'alch:statue',
+          'alch:statue': exportPublic(next),
         },
         ok: true,
         error: null,
@@ -81,6 +82,14 @@ export function apply(state, action) {
       if (item !== 'FEATHER') return fail(state, 'INVALID_ITEM');
       next.featherInserted = true;
       maybeUnlock(next);
+      console.log("[STATUE] after insert", {
+        item,
+        pose: next.pose,
+        featherInserted: next.featherInserted,
+        poseMatched: next.output?.poseMatched,
+        mouthOpened: next.mouthOpened,
+        solved: next.solved,
+      });
       return ok(next);
     }
 
@@ -90,6 +99,14 @@ export function apply(state, action) {
       if (!patched.ok) return fail(state, patched.error);
       next.pose = patched.pose;
       maybeUnlock(next);
+      console.log("[STATUE] after set_pose", {
+        patch,
+        pose: next.pose,
+        featherInserted: next.featherInserted,
+        poseMatched: next.output?.poseMatched,
+        mouthOpened: next.mouthOpened,
+        solved: next.solved,
+      });
       return ok(next);
     }
 
@@ -108,6 +125,16 @@ export function apply(state, action) {
       if (!patched.ok) return fail(state, patched.error);
       next.pose = patched.pose;
       maybeUnlock(next);
+      console.log("[STATUE] after set_part/rotate", {
+        partRaw,
+        value,
+        patch,
+        pose: next.pose,
+        featherInserted: next.featherInserted,
+        poseMatched: next.output?.poseMatched,
+        mouthOpened: next.mouthOpened,
+        solved: next.solved,
+      });
       return ok(next);
     }
 
@@ -116,6 +143,13 @@ export function apply(state, action) {
     case 'submit':
     case 'confirm':
       maybeUnlock(next);
+      console.log("[STATUE] after check", {
+        pose: next.pose,
+        featherInserted: next.featherInserted,
+        poseMatched: next.output?.poseMatched,
+        mouthOpened: next.mouthOpened,
+        solved: next.solved,
+      });
       return ok(next);
 
     case 'take': {

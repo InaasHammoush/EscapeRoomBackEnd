@@ -15,6 +15,7 @@ import * as AlchStatuePose from './alchemist_lab/alchStatuePose.js';
 import * as AlchEastSlidingLock from './alchemist_lab/alchEastSlidingLock.js';
 import * as AlchEastDoorSync from './alchemist_lab/alchEastDoorSync.js';
 import * as AlchLightBeamGrid from './alchemist_lab/alchLightBeamGrid.js';
+import * as FinalDoorWordSync from './final_corridor/finalDoorWordSync.js';
 
 // --- Wizard Modules ---
 import * as TicTacToe from './wizard_library/TicTacToe.js';
@@ -58,6 +59,7 @@ export function initAll() {
     vase_puzzle: VasePuzzle.init(),
     recipe_hint: RecipeHint.init(),
     door_seal: DoorSeal.init(),
+    finalCorridor: FinalDoorWordSync.init(),
 
     // Infra
     processedActions: new Set(),
@@ -92,8 +94,86 @@ export function initAll() {
       vase_puzzle: VasePuzzle.exportPublic(internal.vase_puzzle),
       recipe_hint: RecipeHint.exportPublic(internal.recipe_hint),
       door_seal: DoorSeal.exportPublic(internal.door_seal),
+      finalCorridor: FinalDoorWordSync.exportPublic(internal.finalCorridor),
     },
     internal,
+  };
+}
+
+const DIRECT_OBJECT_ALIASES = Object.freeze({
+  // Legacy demo
+  'switch:A': ['puzzle_coop_switches', 'switch:A'],
+  'switch:B': ['puzzle_coop_switches', 'switch:B'],
+
+  // Wizard
+  tictactoe_scroll: ['puzzle_tictactoe_scroll', 'tictactoe_scroll'],
+  bookshelf_puzzle: ['puzzle_bookshelf', 'bookshelf_puzzle'],
+  candle_puzzle: ['puzzle_candle', 'candle_puzzle'],
+  wizard_transformation_table: ['puzzle_wizard_transformation_table', 'wizard_transformation_table'],
+  merlin_scale: ['puzzle_merlin_scale', 'merlin_scale'],
+  door_seal: ['puzzle_door_seal', 'door_seal'],
+
+  // Alchemist
+  'alch:mortar': ['puzzle_mortar', 'alch:mortar'],
+  'alch:transmuter': ['puzzle_transmuter', 'alch:transmuter'],
+  'alch:ritual-paper': ['puzzle_transmuter', 'alch:ritual-paper'],
+  'alch:west-codebox': ['puzzle_west_codebox', 'alch:west-codebox'],
+  'alch:west-jigsaw': ['puzzle_west_codebox', 'alch:west-jigsaw'],
+  'alch:portrait-books': ['puzzle_portrait_books', 'alch:portrait-books'],
+  'alch:portrait': ['puzzle_portrait_books', 'alch:portrait'],
+  'alch:portrait-lady': ['puzzle_portrait_books', 'alch:portrait-lady'],
+  'alch:flask-transfer': ['puzzle_flask_transfer', 'alch:flask-transfer'],
+  'alch:flasks': ['puzzle_flask_transfer', 'alch:flasks'],
+  'alch:flask-shelf': ['puzzle_flask_transfer', 'alch:flask-shelf'],
+  'alch:north-hierarchy-note': ['puzzle_north_hierarchy_note', 'alch:north-hierarchy-note'],
+  'alch:hierarchy-note': ['puzzle_north_hierarchy_note', 'alch:hierarchy-note'],
+  'alch:note-drawer': ['puzzle_north_hierarchy_note', 'alch:note-drawer'],
+  'alch:statue': ['puzzle_statue_pose', 'alch:statue'],
+  'alch:statue-pose': ['puzzle_statue_pose', 'alch:statue-pose'],
+  'alch:east-sliding-lock': ['puzzle_east_sliding_lock', 'alch:east-sliding-lock'],
+  'alch:east-door-lock': ['puzzle_east_door_sync', 'alch:east-door-lock'],
+  'alch:east-door-switch': ['puzzle_east_door_sync', 'alch:east-door-switch'],
+  'alch:east-door-mechanism': ['puzzle_east_door_sync', 'alch:east-door-mechanism'],
+  'alch:mirror-grid': ['puzzle_light_beam_grid', 'alch:mirror-grid'],
+
+  // Final corridor
+  'final:keypad': ['puzzle_final_corridor', 'final:keypad'],
+  'final:door-keypad': ['puzzle_final_corridor', 'final:door-keypad'],
+  'final:word-input': ['puzzle_final_corridor', 'final:word-input'],
+  'final:door-input': ['puzzle_final_corridor', 'final:door-input'],
+  'final:hint-note': ['puzzle_final_corridor', 'final:hint-note'],
+  'final:rune-note': ['puzzle_final_corridor', 'final:rune-note'],
+  'final:note': ['puzzle_final_corridor', 'final:note'],
+  'final:translation-note': ['puzzle_final_corridor', 'final:translation-note'],
+  'final:plate-left': ['puzzle_final_corridor', 'final:plate-left'],
+  'final:pressure-plate-left': ['puzzle_final_corridor', 'final:pressure-plate-left'],
+  'final:plate-right': ['puzzle_final_corridor', 'final:plate-right'],
+  'final:pressure-plate-right': ['puzzle_final_corridor', 'final:pressure-plate-right'],
+  'final:plate': ['puzzle_final_corridor', 'final:plate'],
+  'final:pressure-plate': ['puzzle_final_corridor', 'final:pressure-plate'],
+  'final:plates': ['puzzle_final_corridor', 'final:plates'],
+});
+
+function normalizeIncomingAction(action) {
+  const objectId = String(action?.objectId || '').trim();
+  if (!objectId) return action;
+  if (objectId.startsWith('trigger_') || objectId.startsWith('puzzle_')) return action;
+
+  if (/^light:\d+:\d+$/.test(objectId)) {
+    return {
+      ...action,
+      objectId: 'puzzle_lights_out',
+      canonicalObjectId: String(action?.canonicalObjectId || objectId),
+    };
+  }
+
+  const mapped = DIRECT_OBJECT_ALIASES[objectId];
+  if (!mapped) return action;
+
+  return {
+    ...action,
+    objectId: mapped[0],
+    canonicalObjectId: String(action?.canonicalObjectId || mapped[1]),
   };
 }
 
@@ -107,7 +187,8 @@ export function apply(state, action) {
     state = initAll();
   }
 
-  const objectId = String(action?.objectId || '');
+  const normalizedAction = normalizeIncomingAction(action);
+  const objectId = String(normalizedAction?.objectId || '');
 
   if (!objectId) {
     return makeResult({ state, ok: false, error: 'MISSING_OBJECT_ID' });
@@ -115,14 +196,14 @@ export function apply(state, action) {
 
   // 1) Widget-Triggers
   if (objectId.startsWith('trigger_')) {
-    const widgetResult = routeWidgetTriggers(state, action);
+    const widgetResult = routeWidgetTriggers(state, normalizedAction);
     if (widgetResult) return widgetResult;
     return makeResult({ state, ok: false, error: 'UNKNOWN_TRIGGER' });
   }
 
   // 2) Puzzle-Routing
   if (objectId.startsWith('puzzle_')) {
-    const puzzleResult = routePuzzleLogic(state, action, now);
+    const puzzleResult = routePuzzleLogic(state, normalizedAction, now);
     if (puzzleResult) return puzzleResult;
     return makeResult({ state, ok: false, error: 'UNKNOWN_PUZZLE_OBJECT' });
   }
@@ -192,6 +273,12 @@ function routeWidgetTriggers(state, action) {
     trigger_light_beam_grid: 'light_beam_grid_puzzle',
     trigger_alch_light_beam_grid: 'light_beam_grid_puzzle',
     trigger_mirror_grid: 'light_beam_grid_puzzle',
+
+    // --- Final Corridor ---
+    trigger_final_hint_note: 'final_rune_hint',
+    trigger_final_keypad: 'final_word_input',
+    trigger_final_plates: 'final_sync_plates',
+    trigger_final_door: 'final_door_panel',
   };
 
   const widget = widgetMap[triggerId];
@@ -234,6 +321,7 @@ function routePuzzleLogic(state, action, now) {
     puzzle_statue_pose:          ['alchStatuePose', AlchStatuePose],
     puzzle_east_sliding_lock:    ['alchEastSlidingLock', AlchEastSlidingLock],
     puzzle_east_door_sync:       ['alchEastDoorSync', AlchEastDoorSync],
+    puzzle_final_corridor:       ['finalCorridor', FinalDoorWordSync],
   };
 
   const hit = puzzleMap[oid];
@@ -242,9 +330,16 @@ function routePuzzleLogic(state, action, now) {
   const [key, moduleRef] = hit;
   
   const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
-  const puzzleAction = canonicalObjectId
+  let puzzleAction = canonicalObjectId
     ? { ...action, objectId: canonicalObjectId }
     : action;
+
+  if (oid === 'puzzle_light_beam_grid') {
+    puzzleAction = {
+      ...action,
+      objectId: canonicalObjectId || 'alch:mirror-grid',
+    };
+  }
 
   return runPuzzle(state, key, moduleRef, puzzleAction, now);
 }
@@ -255,7 +350,25 @@ function runPuzzle(state, key, moduleRef, action, now) {
     return makeResult({ state, ok: false, error: `MISSING_PUZZLE_STATE:${key}` });
   }
 
-  const res = moduleRef.apply(localState, action, now, state);
+  // Defensive remap: some pipelines strip canonicalObjectId before puzzle apply.
+  // Statue module expects alch:* object ids, not puzzle_* ids.
+  const actionForModule =
+    key === 'alchStatuePose' && String(action?.objectId || '') === 'puzzle_statue_pose'
+      ? { ...action, objectId: 'alch:statue-pose' }
+      : action;
+
+  const res = moduleRef.apply(localState, actionForModule, now, state);
+  if (key === 'alchStatuePose') {
+    console.log("[DISPATCH:STATUE] apply result", {
+      objectId: action?.objectId,
+      forwardedObjectId: actionForModule?.objectId,
+      verb: action?.verb,
+      data: action?.data,
+      ok: !!res?.ok,
+      error: res?.error || null,
+      diffKeys: Object.keys(res?.diff || {}),
+    });
+  }
 
   if (!res?.ok) {
     // Manche Module liefern bereits ein vollständiges makeResult-artiges Objekt
@@ -277,7 +390,31 @@ function runPuzzle(state, key, moduleRef, action, now) {
       ? res.diff
       : { [key]: next.public[key] };
 
+  if (key === 'alchStatuePose') {
+    console.log("[DISPATCH:STATUE] exported", {
+      pose: next.public[key]?.pose,
+      featherInserted: next.public[key]?.featherInserted,
+      mouthOpened: next.public[key]?.mouthOpened,
+      solved: next.public[key]?.solved,
+      poseMatched: next.public[key]?.output?.poseMatched,
+      diffKeys: Object.keys(diff || {}),
+    });
+  }
+
   return makeResult({ state: next, diff, ok: true, error: null });
+}
+
+export function syncFinalCorridor(localState, rootState, now = Date.now()) {
+  if (!localState) return { changed: false, nextState: localState };
+  return FinalDoorWordSync.syncFromContext(localState, rootState, now);
+}
+
+export function exportFinalCorridor(localState) {
+  return FinalDoorWordSync.exportPublic(localState);
+}
+
+export function hydrateFinalCorridor(publicState, now = Date.now()) {
+  return FinalDoorWordSync.hydrateFromPublic(publicState, now);
 }
 
 function cloneState(state) {

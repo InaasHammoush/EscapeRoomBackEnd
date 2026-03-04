@@ -33,6 +33,7 @@ export class RoomManager {
    * @param {boolean} opts.awardOnComplete - Punktevergabe bei Abschluss aktivieren?
    * @param {number} opts.pointsOnComplete - Punkte pro Spieler bei Abschluss
    * @param {string} opts.pointsReason - Reason-String für die Score-Events
+   * @param {boolean} opts.statsEnabled - DB-Stats (RoomStats) aktivieren?
    */
   constructor({
     redis = null,
@@ -42,6 +43,7 @@ export class RoomManager {
     awardOnComplete = true,
     pointsOnComplete = 100,
     pointsReason = 'room_completed',
+    statsEnabled = process.env.ROOM_STATS_ENABLED !== 'false',
   } = {}) {
     this.rooms = new Map(); // roomId -> Room
     this.redis = redis;
@@ -52,6 +54,7 @@ export class RoomManager {
     this.awardOnComplete = awardOnComplete;
     this.pointsOnComplete = pointsOnComplete;
     this.pointsReason = pointsReason;
+    this.statsEnabled = !!statsEnabled;
   }
 
   // ----------------------------------------------------------
@@ -83,6 +86,10 @@ export class RoomManager {
           views: getRoomViews(roomName),
           alchDoorState: null,
           inventory: toPublicInventory(starterBag),
+          game: {
+            status: 'running',
+            endedAt: null,
+          },
         },
         internal: {
           ...puzzleInit.internal,
@@ -97,6 +104,8 @@ export class RoomManager {
       opened: !!initialDoorState.open,
       updatedAt: initialDoorState.updatedAt,
     };
+    this._syncFinalCorridorState(room);
+    this._updateGameStatus(room);
     this.rooms.set(id, room);
     this._saveSnapshot(id).catch(() => {});
     this._persistLocal(id);
@@ -204,9 +213,11 @@ export class RoomManager {
       this._persistLocal(id);
 
       // Nicht-blockierend in die DB schreiben
-      RoomStats.recordRoomStarted(room).catch((err) => {
-        console.error('recordRoomStarted failed:', err);
-      });
+      if (this.statsEnabled) {
+        RoomStats.recordRoomStarted(room).catch((err) => {
+          console.error('recordRoomStarted failed:', err);
+        });
+      }
     }
     return room;
   }
@@ -263,7 +274,7 @@ export class RoomManager {
     ensureInventory(room);
 
     // 4) Inventory Bridge (Inventory.js)    
-    const invChanged = applyInventoryBridge(room, prevPublic, normalizedAction);
+    const invChanged = this._applyInventoryBridge(room, prevPublic, normalizedAction);
 
     // 5) GLOBAL TRIGGERS (The logic for the door)
 
@@ -271,6 +282,9 @@ export class RoomManager {
     const wizDoorDiff = this._checkWizardDoorTriggers(room);
     // B. Alchemist Door
     const alchDoorChanged = this._updateAlchemistDoorState(room, normalizedAction);
+    // C. Final corridor runes + win state
+    const finalCorridorChanged = this._syncFinalCorridorState(room);
+    const gameChanged = this._updateGameStatus(room);
 
     this._touchSeq(room);
     this._saveSnapshot(id).catch(() => {});
@@ -286,8 +300,14 @@ export class RoomManager {
         diff.alchDoorState = room.state.public.alchDoorState;
         diff.doorState = room.state.public.doorState;
     }
+    if (finalCorridorChanged) diff.finalCorridor = room.state.public.finalCorridor;
+    if (gameChanged) diff.game = room.state.public.game;
 
     return { ok: true, seq: room.seq, diff };
+  }
+
+  _applyInventoryBridge(room, prevPublic, action) {
+    return applyInventoryBridge(room, prevPublic, action);
   }
 
   /** Öffentlichen Anzeigenamen eines Spielers */
@@ -326,7 +346,12 @@ export class RoomManager {
     const lockVisible = !!(sliding?.output?.lockVisible ?? sliding?.lockVisible ?? sliding?.solved);
     const keyInserted = !!(doorSync?.output?.keyInserted ?? doorSync?.keyInserted);
     const runesActivated = !!(doorSync?.output?.runesActivated ?? doorSync?.runesActivated ?? lightBeam?.solved);
-    const mechanismTriggered = !!(doorSync?.output?.mechanismTriggered ?? doorSync?.mechanismTriggered ?? doorSync?.output?.opened);
+    const mechanismTriggered = !!(
+      doorSync?.output?.mechanismTriggered ??
+      doorSync?.mechanismTriggered ??
+      doorSync?.output?.opened ??
+      doorSync?.opened
+    );
     
     const open = (lockVisible && keyInserted && runesActivated && mechanismTriggered);
 
@@ -349,6 +374,7 @@ export class RoomManager {
 
   _updateAlchemistDoorState(room, action) {
     const objectId = action?.objectId;
+    const canonicalObjectId = action?.canonicalObjectId;
     // Only recalc if a relevant puzzle was touched
     const watched = new Set([
     'alch:east-sliding-lock',
@@ -364,9 +390,50 @@ export class RoomManager {
     'alch:east-lightbeam',
     'alch:door',
     'alch:final-door',
+    'puzzle_east_sliding_lock',
+    'puzzle_east_door_sync',
+    'puzzle_light_beam_grid',
     ]);
-    if (!watched.has(objectId)) return false;
+    if (!watched.has(objectId) && !watched.has(canonicalObjectId)) return false;
     return this._deriveAlchemistDoorState(room);
+  }
+
+  _syncFinalCorridorState(room) {
+    const internalFinal = room?.state?.internal?.finalCorridor;
+    if (!internalFinal) return false;
+    if (typeof Puzzles.syncFinalCorridor !== 'function') return false;
+    if (typeof Puzzles.exportFinalCorridor !== 'function') return false;
+
+    const sync = Puzzles.syncFinalCorridor(internalFinal, room.state, Date.now());
+    if (!sync?.nextState) return false;
+    if (!sync.changed) return false;
+
+    room.state.internal.finalCorridor = sync.nextState;
+    room.state.public.finalCorridor = Puzzles.exportFinalCorridor(sync.nextState);
+    return true;
+  }
+
+  _updateGameStatus(room) {
+    const pub = room?.state?.public;
+    if (!pub) return false;
+
+    const finalDoorOpen = !!pub?.finalCorridor?.finalDoorOpen;
+    const prevGame = pub.game || null;
+
+    if (finalDoorOpen) {
+      pub.game = {
+        status: 'won',
+        endedAt: prevGame?.endedAt || Date.now(),
+      };
+      return JSON.stringify(prevGame) !== JSON.stringify(pub.game);
+    }
+
+    if (!prevGame) {
+      pub.game = { status: 'running', endedAt: null };
+      return true;
+    }
+
+    return false;
   }
 
   // ----------------------------------------------------------
@@ -430,6 +497,13 @@ export class RoomManager {
       },
     };
 
+    if (typeof Puzzles.hydrateFinalCorridor === 'function') {
+      room.state.internal.finalCorridor = Puzzles.hydrateFinalCorridor(
+        room.state.public?.finalCorridor,
+        Date.now()
+      );
+    }
+
     // inventory im public-state sichern
     room.state.public.inventory = toPublicInventory(room.state.internal.inventory);
 
@@ -439,6 +513,8 @@ export class RoomManager {
       opened: !!restoredDoorState.open,
       updatedAt: restoredDoorState.updatedAt,
     };
+    this._syncFinalCorridorState(room);
+    this._updateGameStatus(room);
     this.rooms.set(id, room);
     return room;
   }
@@ -494,13 +570,15 @@ export class RoomManager {
       }
 
       // Raum- und Teilnehmer-Stats in die DB schreiben (nicht-blockierend)
-      RoomStats.recordRoomCompleted(room).catch((err) => {
-        console.error('recordRoomCompleted failed:', err);
-      });
+      if (this.statsEnabled) {
+        RoomStats.recordRoomCompleted(room).catch((err) => {
+          console.error('recordRoomCompleted failed:', err);
+        });
 
-      RoomStats.recordParticipantsOnComplete(room).catch((err) => {
-        console.error('recordParticipantsOnComplete failed:', err);
-      });
+        RoomStats.recordParticipantsOnComplete(room).catch((err) => {
+          console.error('recordParticipantsOnComplete failed:', err);
+        });
+      }
 
       // Optional: Punktevergabe via Outbox (Redis Stream) – asynchron
       if (this.awardOnComplete && this.redis) {
@@ -529,6 +607,8 @@ export class RoomManager {
 function defaultCompletionPredicate(state) {
   try {
     const pub = state?.public ?? {};
+    if (pub?.game?.status === 'won') return true;
+
     const values = Object.values(pub);
     if (values.length === 0) return false;
 
