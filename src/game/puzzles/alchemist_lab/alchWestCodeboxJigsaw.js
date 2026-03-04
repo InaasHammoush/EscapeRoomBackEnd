@@ -7,6 +7,7 @@
 import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchWestCodeboxJigsaw';
+const WIDGET_ID = 'alch:west-codebox';
 const VALID_OBJECTS = new Set(['alch:west-codebox', 'alch:west-jigsaw']);
 
 const EXPECTED_CODE = '2848693';
@@ -42,9 +43,17 @@ export function apply(state, action) {
   const verb = normalizeVerb(action.verb);
   const next = clone(state);
 
-  // Widget/UI öffnen
+  // Widget öffnen
   if (verb === 'interact' || verb === 'inspect' || verb === 'open') {
-    return ok(next);
+    return makeResult({
+      state: next,
+      diff: {
+        activeWidget: WIDGET_ID,
+        [WIDGET_ID]: exportPublic(next),
+      },
+      ok: true,
+      error: null,
+    });
   }
 
   switch (verb) {

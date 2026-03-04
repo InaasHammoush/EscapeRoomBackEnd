@@ -22,6 +22,7 @@
 import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchLightBeamGrid';
+const VALID_OBJECT_IDS = new Set(['alch:mirror-grid', 'puzzle_light_beam_grid']);
 
 // ---------- 7x7 Preset (lösbar) ----------
 export const GRID_7X7_PRESET = Object.freeze({
@@ -108,12 +109,24 @@ export function init(config = {}) {
 
 // ---------- Apply ----------
 export function apply(state, action) {
-  if (!action || action.objectId !== 'alch:mirror-grid') {
+  if (!action || !VALID_OBJECT_IDS.has(String(action.objectId || '').trim())) {
     return fail(state, 'INVALID_OBJECT');
   }
 
   const verb = String(action.verb || '').toLowerCase().trim();
   const next = clone(state);
+
+  if (verb === 'interact' || verb === 'inspect' || verb === 'open') {
+    return makeResult({
+      state: next,
+      diff: {
+        activeWidget: PUZZLE_KEY,
+        [PUZZLE_KEY]: exportPublic(next),
+      },
+      ok: true,
+      error: null,
+    });
+  }
 
   switch (verb) {
     case 'place_mirror': {

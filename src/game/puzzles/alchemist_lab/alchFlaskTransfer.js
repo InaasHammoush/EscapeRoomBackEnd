@@ -1,8 +1,9 @@
 import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'alchFlaskTransfer';
+const WIDGET_ID = 'alch:flask-transfer';
 const OBJECT_IDS = new Set([
-  'alch:flask-transfer',
+  WIDGET_ID,
   'alch:flasks',
   'alch:flask-shelf',
 ]);
@@ -16,13 +17,13 @@ const TARGETS = Object.freeze({
 });
 
 const CAPACITY = 5;
-const BASE_LAYERS_PER_BOTTLE = 4;
+const BASE_LAYERS_PER_BOTTLE = 3;
 
 const INITIAL_BOTTLES = Object.freeze({
-  RUBY: ['GREEN', 'RED', 'PURPLE', 'YELLOW'],
-  CITRINE: ['RED', 'YELLOW', 'GREEN', 'PURPLE'],
-  EMERALD: ['PURPLE', 'GREEN', 'YELLOW', 'RED'],
-  AMETHYST: ['YELLOW', 'PURPLE', 'RED', 'GREEN'],
+  RUBY: ['RED', 'YELLOW', 'GREEN'],
+  CITRINE: ['GREEN', 'RED', 'PURPLE'],
+  EMERALD: ['RED', 'PURPLE', 'YELLOW'],
+  AMETHYST: ['PURPLE', 'YELLOW', 'GREEN'],
 });
 
 export function init() {
@@ -53,11 +54,32 @@ export function apply(state, action) {
 
   switch (verb) {
     case 'interact':
-      return ok(next);
+      return makeResult({
+        state: next,
+        diff: {
+          activeWidget: WIDGET_ID,
+          [WIDGET_ID]: exportPublic(next),
+        },
+        ok: true,
+        error: null,
+      });
 
-    case 'pour': {
-      const from = normalizeBottle(action?.data?.from ?? action?.data?.source);
-      const to = normalizeBottle(action?.data?.to ?? action?.data?.target);
+    case 'pour':
+    case 'stack':
+    case 'transfer':
+    case 'move': {
+      const from = normalizeBottle(
+        action?.data?.from ??
+        action?.data?.source ??
+        action?.data?.fromBottle ??
+        action?.data?.sourceBottle
+      );
+      const to = normalizeBottle(
+        action?.data?.to ??
+        action?.data?.target ??
+        action?.data?.toBottle ??
+        action?.data?.targetBottle
+      );
 
       if (!from || !to) return fail(state, 'INVALID_BOTTLE');
       if (from === to) return fail(state, 'SAME_BOTTLE');
@@ -120,7 +142,7 @@ export function exportPublic(state) {
     rules: {
       pourUnit: 'single-layer',
       requireMatchingTopColor: false,
-      objective: 'RUBY=RED, CITRINE=YELLOW, EMERALD=GREEN, AMETHYST=PURPLE (je 4 Schichten)',
+      objective: 'RUBY=RED, CITRINE=YELLOW, EMERALD=GREEN, AMETHYST=PURPLE (je 3 Schichten)',
     },
   };
 }

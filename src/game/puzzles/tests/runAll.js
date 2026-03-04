@@ -10,6 +10,7 @@ const testFiles = [
   'testNorthWall.js',
   'testLightBeamGrid.js',
   'testEastWallFlow.js', // <-- neu
+  'testFinalCorridorFlow.js',
 ];
 
 function runTest(file) {

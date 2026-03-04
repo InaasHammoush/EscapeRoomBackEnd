@@ -1,6 +1,9 @@
 // src/game/puzzles/alchEastSlidingLock.js
+const PUZZLE_KEY = 'alchEastSlidingLock';
+const WIDGET_ID = 'alch:east-sliding-lock';
 const SIZE = 3;
 const SOLVED_BOARD = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+const VALID_OBJECTS = new Set(['alch:east-codebox', 'alch:east-jigsaw', 'alch:east-sliding-lock']);
 
 // Solvable Start (2 moves away):
 // move tile 7, then 8 -> solved
@@ -63,8 +66,19 @@ export function exportPublic(state) {
 }
 
 export function apply(state, action) {
+  if (!action || !VALID_OBJECTS.has(String(action.objectId || '').trim())) {
+    return fail(state, 'INVALID_OBJECT');
+  }
+
   const next = clone(state);
   const verb = String(action?.verb || '').toLowerCase().trim();
+
+  if (verb === 'interact' || verb === 'inspect' || verb === 'open') {
+    return ok(next, {
+      activeWidget: WIDGET_ID,
+      [WIDGET_ID]: exportPublic(next),
+    });
+  }
 
   if (verb === 'reset') {
     const reset = init();

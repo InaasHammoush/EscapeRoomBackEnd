@@ -6,7 +6,6 @@ import { REWARD_RULES } from './puzzles/helper/rewardRules.js';
 export const STARTER_INVENTORY = Object.freeze({
    MOONWORT: 1,
    GREEN_LIQUID: 1,
-//   GOLD_NUGGET: 1,
 });
 
 
@@ -158,6 +157,7 @@ export function _normalizeItem(input) {
   if (['NOTE_RUNES', 'RUNE_NOTE'].includes(raw)) return 'NOTE_RUNES';
   if (['ASH_KEY', 'ASHKEY'].includes(raw)) return 'ASH_KEY';
   if (['SKETCH_ALCHEMIST', 'ALCHEMIST_SKETCH'].includes(raw)) return 'SKETCH_ALCHEMIST';
+  if (['CHEST_KEY', 'CHESTKEY', 'TRUHENSCHLÜSSEL'].includes(raw)) return 'CHEST_KEY';
 
   return null;
 }
