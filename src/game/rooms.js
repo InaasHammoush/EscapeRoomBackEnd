@@ -11,12 +11,23 @@
 import crypto from 'node:crypto';
 import * as Puzzles from './puzzles/index.js';
 import { enqueueScoreEvent } from '../infra/outbox.js'; // optional – nur genutzt, wenn Redis existiert
-import * as RoomStats from '../models/roomStats.model.js';
 import { roomImagesMapper } from '../data/roomImagesMapper.js';
 import * as Inventory from './inventory.js';
 
 const { STARTER_INVENTORY, toPublicInventory, fromPublicInventory, cloneBag, normalizeActionItems, 
   ensureInventory, precheckInventoryForAction, applyInventoryBridge } = Inventory;
+
+let roomStatsModulePromise = null;
+let roomStatsUnavailableGlobally = false;
+async function getRoomStatsModule() {
+  if (roomStatsUnavailableGlobally) {
+    return Promise.reject(Object.assign(new Error('ROOM_STATS_UNAVAILABLE'), { code: 'ERR_MODULE_NOT_FOUND' }));
+  }
+  if (!roomStatsModulePromise) {
+    roomStatsModulePromise = import('../models/roomStats.model.js');
+  }
+  return roomStatsModulePromise;
+}
 
 function getRoomViews(roomName) {
   const viewsMap = roomImagesMapper[roomName] || roomImagesMapper.default || {};
@@ -214,9 +225,7 @@ export class RoomManager {
 
       // Nicht-blockierend in die DB schreiben
       if (this.statsEnabled) {
-        RoomStats.recordRoomStarted(room).catch((err) => {
-          console.error('recordRoomStarted failed:', err);
-        });
+        this._recordRoomStarted(room);
       }
     }
     return room;
@@ -441,6 +450,36 @@ export class RoomManager {
   // ----------------------------------------------------------
 
   /** Seq erhöhen (deterministische Reihenfolge) */
+  _recordRoomStarted(room) {
+    this._runWithRoomStats('recordRoomStarted', (RoomStats) => RoomStats.recordRoomStarted(room));
+  }
+
+  _recordRoomCompleted(room) {
+    this._runWithRoomStats('recordRoomCompleted', (RoomStats) => RoomStats.recordRoomCompleted(room));
+  }
+
+  _recordParticipantsOnComplete(room) {
+    this._runWithRoomStats('recordParticipantsOnComplete', (RoomStats) =>
+      RoomStats.recordParticipantsOnComplete(room)
+    );
+  }
+
+  _runWithRoomStats(opName, run) {
+    if (roomStatsUnavailableGlobally) return;
+    getRoomStatsModule()
+      .then((RoomStats) => run(RoomStats))
+      .catch((err) => {
+        if (err?.code === 'ERR_MODULE_NOT_FOUND') {
+          if (!roomStatsUnavailableGlobally) {
+            roomStatsUnavailableGlobally = true;
+            console.warn('[RoomStats] disabled at runtime: database module is unavailable');
+          }
+          return;
+        }
+        console.error(`${opName} failed:`, err);
+      });
+  }
+
   _touchSeq(room) {
     room.seq += 1;
   }
@@ -571,13 +610,8 @@ export class RoomManager {
 
       // Raum- und Teilnehmer-Stats in die DB schreiben (nicht-blockierend)
       if (this.statsEnabled) {
-        RoomStats.recordRoomCompleted(room).catch((err) => {
-          console.error('recordRoomCompleted failed:', err);
-        });
-
-        RoomStats.recordParticipantsOnComplete(room).catch((err) => {
-          console.error('recordParticipantsOnComplete failed:', err);
-        });
+        this._recordRoomCompleted(room);
+        this._recordParticipantsOnComplete(room);
       }
 
       // Optional: Punktevergabe via Outbox (Redis Stream) – asynchron
