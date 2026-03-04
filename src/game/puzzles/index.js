@@ -308,9 +308,16 @@ function routePuzzleLogic(state, action, now) {
   const [key, moduleRef] = hit;
   
   const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
-  const puzzleAction = canonicalObjectId
+  let puzzleAction = canonicalObjectId
     ? { ...action, objectId: canonicalObjectId }
     : action;
+
+  if (oid === 'puzzle_light_beam_grid') {
+    puzzleAction = {
+      ...action,
+      objectId: canonicalObjectId || 'alch:mirror-grid',
+    };
+  }
 
   return runPuzzle(state, key, moduleRef, puzzleAction, now);
 }
@@ -321,7 +328,25 @@ function runPuzzle(state, key, moduleRef, action, now) {
     return makeResult({ state, ok: false, error: `MISSING_PUZZLE_STATE:${key}` });
   }
 
-  const res = moduleRef.apply(localState, action, now, state);
+  // Defensive remap: some pipelines strip canonicalObjectId before puzzle apply.
+  // Statue module expects alch:* object ids, not puzzle_* ids.
+  const actionForModule =
+    key === 'alchStatuePose' && String(action?.objectId || '') === 'puzzle_statue_pose'
+      ? { ...action, objectId: 'alch:statue-pose' }
+      : action;
+
+  const res = moduleRef.apply(localState, actionForModule, now, state);
+  if (key === 'alchStatuePose') {
+    console.log("[DISPATCH:STATUE] apply result", {
+      objectId: action?.objectId,
+      forwardedObjectId: actionForModule?.objectId,
+      verb: action?.verb,
+      data: action?.data,
+      ok: !!res?.ok,
+      error: res?.error || null,
+      diffKeys: Object.keys(res?.diff || {}),
+    });
+  }
 
   if (!res?.ok) {
     // Manche Module liefern bereits ein vollständiges makeResult-artiges Objekt
@@ -342,6 +367,17 @@ function runPuzzle(state, key, moduleRef, action, now) {
     res.diff && Object.keys(res.diff).length > 0
       ? res.diff
       : { [key]: next.public[key] };
+
+  if (key === 'alchStatuePose') {
+    console.log("[DISPATCH:STATUE] exported", {
+      pose: next.public[key]?.pose,
+      featherInserted: next.public[key]?.featherInserted,
+      mouthOpened: next.public[key]?.mouthOpened,
+      solved: next.public[key]?.solved,
+      poseMatched: next.public[key]?.output?.poseMatched,
+      diffKeys: Object.keys(diff || {}),
+    });
+  }
 
   return makeResult({ state: next, diff, ok: true, error: null });
 }
