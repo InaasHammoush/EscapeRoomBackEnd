@@ -32,6 +32,7 @@ export const schemas = {
     roomId: z.uuid(),
     actionId: z.uuid(),
     objectId: z.string().min(1), // z. B. "switch:A"
+    canonicalObjectId: z.string().min(1).optional(),
     verb: z.string().min(1),     // z. B. "toggle"
     data: z.any().optional()
   }).loose(),
