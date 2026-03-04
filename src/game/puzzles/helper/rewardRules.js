@@ -57,7 +57,7 @@ export const REWARD_RULES = [
   // 5. Flasks (Complex Multi-Reward)
   {
     puzzle: 'alchFlaskTransfer',
-    check: (prev, next) => (!prev.output?.coalReady && next.output?.coalReady),
+    check: (prev, next) => (!prev.output?.coalBlockReady && next.output?.coalBlockReady),
     item: 'COAL_BLOCK'
   },
   {
