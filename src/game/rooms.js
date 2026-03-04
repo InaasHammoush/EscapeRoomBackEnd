@@ -323,10 +323,9 @@ export class RoomManager {
   _checkWizardDoorTriggers(room) {
     const pub = room.state.public;
     const diff = {};
-    const scrollSolved = !!(pub?.scroll_grid?.solved || pub?.tictactoe_scroll?.solved);
-    if (pub.door_seal) {
+    if (pub.door_seal && pub.tictactoe_scroll) {
       const keyInserted = pub.door_seal.hasKey;
-      const gameSolved = scrollSolved;
+      const gameSolved = pub.tictactoe_scroll.solved;
       const alreadyOpen = pub.door_seal.openable;
 
       if (keyInserted && gameSolved && !alreadyOpen) {

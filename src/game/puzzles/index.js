@@ -21,9 +21,11 @@ import * as FinalDoorWordSync from './final_corridor/finalDoorWordSync.js';
 import * as TicTacToe from './wizard_library/TicTacToe.js';
 import * as Bookshelf from './wizard_library/Bookshelf.js';
 import * as CandlePuzzle from './wizard_library/CandlePuzzle.js';
-import * as WizardTransformationTable from './wizard_library/WizTransformationPuzzle.js';
+import * as transformationTable from './wizard_library/TransformationTable.js';
 import * as MerlinScale from './wizard_library/MerlinScale.js';
 import * as DoorSeal from './wizard_library/DoorSeal.js';
+import * as VasePuzzle from './wizard_library/VasePuzzle.js';
+import * as RecipeHint from './wizard_library/RecipeHint.js';
 
 import { makeResult } from './fsm.js';
 
@@ -52,8 +54,10 @@ export function initAll() {
     tictactoe_scroll: TicTacToe.init(),
     bookshelf_puzzle: Bookshelf.init(),
     candle_puzzle: CandlePuzzle.init(),
-    wizard_transformation_table: WizardTransformationTable.init(),
+    transformation_table_puzzle: transformationTable.init(),
     merlin_scale: MerlinScale.init(),
+    vase_puzzle: VasePuzzle.init(),
+    recipe_hint: RecipeHint.init(),
     door_seal: DoorSeal.init(),
     finalCorridor: FinalDoorWordSync.init(),
 
@@ -85,8 +89,10 @@ export function initAll() {
       tictactoe_scroll: TicTacToe.exportPublic(internal.tictactoe_scroll),
       bookshelf_puzzle: Bookshelf.exportPublic(internal.bookshelf_puzzle),
       candle_puzzle: CandlePuzzle.exportPublic(internal.candle_puzzle),
-      wizard_transformation_table: WizardTransformationTable.exportPublic(internal.wizard_transformation_table),
+      transformation_table: transformationTable.exportPublic(internal.transformation_table),
       merlin_scale: MerlinScale.exportPublic(internal.merlin_scale),
+      vase_puzzle: VasePuzzle.exportPublic(internal.vase_puzzle),
+      recipe_hint: RecipeHint.exportPublic(internal.recipe_hint),
       door_seal: DoorSeal.exportPublic(internal.door_seal),
       finalCorridor: FinalDoorWordSync.exportPublic(internal.finalCorridor),
     },
@@ -206,15 +212,29 @@ export function apply(state, action) {
 }
 
 function routeWidgetTriggers(state, action) {
+  const triggerId = String(action?.objectId || '');
+  const tictactoeSolved = !!state?.public?.tictactoe_scroll?.solved;
+
+  if (triggerId === 'trigger_tictactoe_scroll' && tictactoeSolved) {
+    return makeResult({ state, ok: false, error: 'SCROLL_ALREADY_SOLVED' });
+  }
+
+  if (triggerId === 'trigger_door_seal' && !tictactoeSolved) {
+    return makeResult({ state, ok: false, error: 'DOOR_LOCKED_UNTIL_SCROLL_SOLVED' });
+  }
+
   const widgetMap = {
     // --- WIZARD ---
     trigger_tictactoe_scroll: "tictactoe_scroll",
+    trigger_door_seal: "door_seal",
     trigger_bookshelf: "bookshelf_puzzle",
     trigger_candle_puzzle: "candle_puzzle",
     trigger_wiz_hint_candles: "candle_hint",
     trigger_wiz_hint_recipe: "recipe_hint",
     trigger_wiz_hint_frame: "frame_hint",
     trigger_merlin_scale: "merlin_scale",
+    trigger_transformation_table: "transformation_table_puzzle",
+    trigger_key_vase: "vase_puzzle",
 
     // --- ALCHEMIST ---
     trigger_mortar: 'mortar_puzzle',
@@ -261,7 +281,7 @@ function routeWidgetTriggers(state, action) {
     trigger_final_door: 'final_door_panel',
   };
 
-  const widget = widgetMap[String(action?.objectId || '')];
+  const widget = widgetMap[triggerId];
   if (!widget) return null;
 
   return makeResult({
@@ -284,9 +304,11 @@ function routePuzzleLogic(state, action, now) {
     puzzle_tictactoe_scroll:            ['tictactoe_scroll', TicTacToe],
     puzzle_bookshelf:                   ['bookshelf_puzzle', Bookshelf],
     puzzle_candle:                      ['candle_puzzle', CandlePuzzle],
-    puzzle_wizard_transformation_table: ['wizard_transformation_table', WizardTransformationTable],
+    puzzle_transformation_table:        ['transformation_table_puzzle', transformationTable],
     puzzle_merlin_scale:                ['merlin_scale', MerlinScale],
     puzzle_door_seal:                   ['door_seal', DoorSeal],
+    puzzle_vase:                        ['vase_puzzle', VasePuzzle],
+    puzzle_recipe_hint:                 ['recipe_hint', RecipeHint],
 
     // --- Alchemist ---
     puzzle_light_beam_grid:      ['alchLightBeamGrid', AlchLightBeamGrid],

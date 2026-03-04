@@ -13,7 +13,7 @@ export const REWARD_RULES = [
     item: 'NOTE_RUNES'
   },
   {
-    puzzle: 'wizard_transformation_table',
+    puzzle: 'transformation_table_puzzle',
     check: (prev, next) => !prev.keyTaken && next.keyTaken,
     item: 'ASH_KEY'
   },
@@ -21,6 +21,16 @@ export const REWARD_RULES = [
     puzzle: 'merlin_scale',
     check: (prev, next) => !prev.solved && next.solved,
     item: ['WHITE_ROSE', 'SKETCH_ALCHEMIST']
+  },
+  {
+    puzzle: 'vase_puzzle',
+    check: (prev, next) => !prev.keyTaken && next.keyTaken,
+    item: 'CHEST_KEY'
+  },
+  {
+    puzzle: 'recipe_hint',
+    check: (prev, next) => !prev.recipeTaken && next.recipeTaken,
+    item: 'RECIPE'
   },
 
   // --- Alchemist ---
