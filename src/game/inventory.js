@@ -4,12 +4,12 @@ import { CONSUMPTION_RULES } from './puzzles/helper/consumptionRules.js';
 import { REWARD_RULES } from './puzzles/helper/rewardRules.js';
 
 export const STARTER_INVENTORY = Object.freeze({
-   MOONWORT: 1,
-   GREEN_LIQUID: 1,
-   COAL_BLOCK: 1,
-   GOLD_NUGGET: 1,
-   MATCHES: 1,
-   FEATHER: 1,
+   //MOONWORT: 1,
+   //GREEN_LIQUID: 1,
+   //COAL_BLOCK: 1,
+   //GOLD_NUGGET: 1,
+   //MATCHES: 1,
+   //FEATHER: 1,
 });
 
 
