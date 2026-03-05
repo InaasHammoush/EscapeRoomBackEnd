@@ -16,7 +16,7 @@ const TARGETS = Object.freeze({
   AMETHYST: 'PURPLE',
 });
 
-const CAPACITY = 5;
+const CAPACITY = 4;
 const BASE_LAYERS_PER_BOTTLE = 3;
 
 const INITIAL_BOTTLES = Object.freeze({
