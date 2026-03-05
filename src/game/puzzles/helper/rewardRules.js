@@ -58,6 +58,12 @@ export const REWARD_RULES = [
     check: (prev, next) => !prev.solved && next.solved,
     item: 'LIGHT_SIGIL'
   },
+  // 3b. Statue pose (Flamma Note)
+  {
+    puzzle: 'alchStatuePose',
+    check: (prev, next) => !prev.output?.noteTaken && next.output?.noteTaken,
+    item: 'NOTE_FLAMMA'
+  },
   // 4. Portrait (Feather + Gold)
   {
     puzzle: 'alchPortraitBooks',

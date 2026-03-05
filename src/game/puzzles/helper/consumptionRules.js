@@ -26,5 +26,9 @@ export const CONSUMPTION_RULES = [
 
   // check for "alch:east-door-lock" and consume "GOLDEN_KEY"
   { objectId: 'alch:east-door-lock',   verb: 'insert', item: 'GOLDEN_KEY' },
-  { objectId: 'puzzle_east_door_sync', verb: 'insert', item: 'GOLDEN_KEY' } // Alias
+  { objectId: 'puzzle_east_door_sync', verb: 'insert', item: 'GOLDEN_KEY' }, // Alias
+
+  // check for statue feather offering
+  { objectId: 'alch:statue',           verb: 'insert', item: 'FEATHER' },
+  { objectId: 'puzzle_statue_pose',    verb: 'insert', item: 'FEATHER' } // Alias
 ];

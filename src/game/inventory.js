@@ -9,6 +9,7 @@ export const STARTER_INVENTORY = Object.freeze({
    COAL_BLOCK: 1,
    GOLD_NUGGET: 1,
    MATCHES: 1,
+   FEATHER: 1,
 });
 
 
