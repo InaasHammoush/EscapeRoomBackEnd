@@ -11,6 +11,8 @@ export const CONSUMPTION_RULES = [
   // check for "alch:mortar" and consume "MOONWORT"
   { objectId: 'alch:mortar',           verb: 'insert', item: 'MOONWORT' },
   { objectId: 'puzzle_mortar',         verb: 'insert', item: 'MOONWORT' }, // Alias
+  { objectId: 'alch:mortar',           verb: 'insert', item: 'GREEN_LIQUID' },
+  { objectId: 'puzzle_mortar',         verb: 'insert', item: 'GREEN_LIQUID' }, // Alias
   
   // check for "alch:transmuter" and consume "GOLD_NUGGET"
   { objectId: 'alch:transmuter',       verb: 'insert', item: 'GOLD_NUGGET' },

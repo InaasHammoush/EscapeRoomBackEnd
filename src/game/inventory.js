@@ -40,9 +40,21 @@ export function precheckInventoryForAction(room, action) {
     const item = _normalizeItem(action?.data?.item);
     if (!item) return { ok: true }; 
 
+    const objectId = String(action?.objectId || '');
+    const verb = String(action?.verb || '').toLowerCase();
+    // Mortar extraction requires an empty bottle in inventory.
+    if (
+      (objectId === 'alch:mortar' || objectId === 'puzzle_mortar') &&
+      verb === 'take' &&
+      item === 'BLUE_LIQUID' &&
+      !_bagHas(room.state.internal.inventory, 'EMPTY_BOTTLE', 1)
+    ) {
+      return { ok: false, error: 'INVENTORY_ITEM_MISSING' };
+    }
+
     const rule = CONSUMPTION_RULES.find(r => 
-      r.objectId === action.objectId && 
-      r.verb.toLowerCase() === (action.verb || '').toLowerCase() &&
+      r.objectId === objectId && 
+      r.verb.toLowerCase() === verb &&
       r.item === item
     );
 
@@ -57,19 +69,32 @@ export function precheckInventoryForAction(room, action) {
 export function applyInventoryBridge(room, prevPublic, action) {
   let changed = false;
   const bag = room.state.internal.inventory;
+  const objectId = String(action?.objectId || '');
+  const verb = String(action?.verb || '').toLowerCase();
 
   // 1. Consumption
   const item = _normalizeItem(action?.data?.item);
   if (item) {
     const rule = CONSUMPTION_RULES.find(r => 
-      r.objectId === action.objectId && 
-      r.verb.toLowerCase() === (action.verb || '').toLowerCase() &&
+      r.objectId === objectId && 
+      r.verb.toLowerCase() === verb &&
       r.item === item
     );
     if (rule && _bagHas(bag, item, 1)) {
       _bagRemove(bag, item, 1);
       changed = true;
     }
+  }
+
+  // 1b. Special swap: taking blue liquid consumes one empty bottle.
+  if (
+    (objectId === 'alch:mortar' || objectId === 'puzzle_mortar') &&
+    verb === 'take' &&
+    item === 'BLUE_LIQUID' &&
+    _bagHas(bag, 'EMPTY_BOTTLE', 1)
+  ) {
+    _bagRemove(bag, 'EMPTY_BOTTLE', 1);
+    changed = true;
   }
 
   // 2. Rewards

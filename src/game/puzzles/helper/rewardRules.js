@@ -38,7 +38,12 @@ export const REWARD_RULES = [
   // 1. Mortar (Blue Liquid)
   {
     puzzle: 'alchMortarEssence',
-    check: (prev, next) => !prev.output?.blueLiquidReady && next.output?.blueLiquidReady,
+    check: (prev, next) => !prev.inserted?.greenLiquid && next.inserted?.greenLiquid,
+    item: 'EMPTY_BOTTLE'
+  },
+  {
+    puzzle: 'alchMortarEssence',
+    check: (prev, next) => !prev.output?.blueLiquidTaken && next.output?.blueLiquidTaken,
     item: 'BLUE_LIQUID'
   },
   // 2. Transmuter (Golden Key)

@@ -95,7 +95,6 @@ export function apply(state, action) {
       if (next.output.blueLiquidReady) return fail(state, 'BLUE_LIQUID_ALREADY_CREATED');
 
       next.output.blueLiquidReady = true;
-      next.solved = true;
       next.phase = 'BLUE_LIQUID_READY';
       return ok(next);
     }
@@ -106,8 +105,8 @@ export function apply(state, action) {
       if (!next.output.blueLiquidReady) return fail(state, 'BLUE_LIQUID_NOT_READY');
 
       next.output.blueLiquidTaken = true;
+      next.solved = true;
       next.phase = 'COMPLETED';
-      // solved bleibt true
       return ok(next);
     }
 
@@ -150,7 +149,7 @@ export function isSolved(state) {
 // -------------------- internals --------------------
 
 function deriveNextActions(state) {
-  if (state.solved && !state.output.blueLiquidTaken) {
+  if (state.output.blueLiquidReady && !state.output.blueLiquidTaken) {
     return ['take(BLUE_LIQUID)'];
   }
   if (state.solved) return [];
@@ -202,9 +201,13 @@ function deriveContents(state) {
 }
 
 function ok(nextState) {
+  const publicState = exportPublic(nextState);
   return makeResult({
     state: nextState,
-    diff: { [PUZZLE_KEY]: exportPublic(nextState) },
+    diff: {
+      'alch:mortar': publicState,
+      [PUZZLE_KEY]: publicState,
+    },
     ok: true,
     error: null,
   });

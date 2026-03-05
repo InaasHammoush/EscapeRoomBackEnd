@@ -75,6 +75,7 @@ export function initAll() {
       alchFlaskTransfer: AlchFlaskTransfer.exportPublic(internal.alchFlaskTransfer),
       // Alchemy West
       alchMortarEssence: AlchMortarEssence.exportPublic(internal.alchMortarEssence),
+      'alch:mortar': AlchMortarEssence.exportPublic(internal.alchMortarEssence),
       alchKeyTransmutation: AlchKeyTransmutation.exportPublic(internal.alchKeyTransmutation),
       alchWestCodeboxJigsaw: AlchWestCodeboxJigsaw.exportPublic(internal.alchWestCodeboxJigsaw),
       // Alchemy North
@@ -237,8 +238,8 @@ function routeWidgetTriggers(state, action) {
     trigger_key_vase: "vase_puzzle",
 
     // --- ALCHEMIST ---
-    trigger_mortar: 'mortar_puzzle',
-    trigger_alch_mortar: 'mortar_puzzle',
+    trigger_mortar: 'alch:mortar',
+    trigger_alch_mortar: 'alch:mortar',
 
     trigger_transmuter: 'transmuter_puzzle',
     trigger_alch_transmuter: 'transmuter_puzzle',
@@ -384,6 +385,9 @@ function runPuzzle(state, key, moduleRef, action, now) {
   const next = cloneState(state);
   next.internal[key] = nextLocalState;
   next.public[key] = moduleRef.exportPublic(nextLocalState);
+  if (key === 'alchMortarEssence') {
+    next.public['alch:mortar'] = next.public[key];
+  }
 
   const diff =
     res.diff && Object.keys(res.diff).length > 0
