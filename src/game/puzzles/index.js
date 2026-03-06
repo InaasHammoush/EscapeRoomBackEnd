@@ -16,6 +16,7 @@ import * as AlchEastSlidingLock from './alchemist_lab/alchEastSlidingLock.js';
 import * as AlchEastDoorSync from './alchemist_lab/alchEastDoorSync.js';
 import * as AlchLightBeamGrid from './alchemist_lab/alchLightBeamGrid.js';
 import * as FinalDoorWordSync from './final_corridor/finalDoorWordSync.js';
+import* as PortraitPuzzle from './alchemist_lab/PortraitPuzzle.js';
 
 // --- Wizard Modules ---
 import * as TicTacToe from './wizard_library/TicTacToe.js';
@@ -38,6 +39,7 @@ export function initAll() {
     // Alchemy South
     alchPortraitBooks: AlchPortraitBooks.init(),
     alchFlaskTransfer: AlchFlaskTransfer.init(),
+    alchPortrait: PortraitPuzzle.init(),
     // Alchemy West
     alchMortarEssence: AlchMortarEssence.init(),
     alchKeyTransmutation: AlchKeyTransmutation.init(),
@@ -73,6 +75,7 @@ export function initAll() {
       // Alchemy
       alchPortraitBooks: AlchPortraitBooks.exportPublic(internal.alchPortraitBooks),
       alchFlaskTransfer: AlchFlaskTransfer.exportPublic(internal.alchFlaskTransfer),
+      alchPortrait: PortraitPuzzle.exportPublic(internal.alchPortrait),
       // Alchemy West
       alchMortarEssence: AlchMortarEssence.exportPublic(internal.alchMortarEssence),
       'alch:mortar': AlchMortarEssence.exportPublic(internal.alchMortarEssence),
@@ -115,6 +118,7 @@ const DIRECT_OBJECT_ALIASES = Object.freeze({
   door_seal: ['puzzle_door_seal', 'door_seal'],
 
   // Alchemist
+  alchPortrait: ['puzzle_portrait_books', 'alch:portrait'],
   'alch:mortar': ['puzzle_mortar', 'alch:mortar'],
   'alch:transmuter': ['puzzle_transmuter', 'alch:transmuter'],
   'alch:ritual-paper': ['puzzle_transmuter', 'alch:ritual-paper'],
@@ -295,6 +299,7 @@ function routeWidgetTriggers(state, action) {
 
 function routePuzzleLogic(state, action, now) {
   const oid = String(action?.objectId || '');
+  const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
 
   const puzzleMap = {
     // Legacy
@@ -328,9 +333,14 @@ function routePuzzleLogic(state, action, now) {
   const hit = puzzleMap[oid];
   if (!hit) return null;
 
+  // Portrait widget actions (open/take) are handled by PortraitPuzzle.
+  if (oid === 'puzzle_portrait_books' && canonicalObjectId === 'alch:portrait') {
+    const portraitAction = { ...action, objectId: canonicalObjectId };
+    return runPuzzle(state, 'alchPortrait', PortraitPuzzle, portraitAction, now);
+  }
+
   const [key, moduleRef] = hit;
-  
-  const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
+
   let puzzleAction = canonicalObjectId
     ? { ...action, objectId: canonicalObjectId }
     : action;

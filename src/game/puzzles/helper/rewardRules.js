@@ -34,7 +34,6 @@ export const REWARD_RULES = [
   },
 
   // --- Alchemist ---
-  
   // 1. Mortar (Blue Liquid)
   {
     puzzle: 'alchMortarEssence',
@@ -99,5 +98,15 @@ export const REWARD_RULES = [
     puzzle: 'alchFlaskTransfer',
     check: (prev, next) => (!prev.output?.greenLiquidReady && next.output?.greenLiquidReady) || (!prev.solved && next.solved),
     item: 'GREEN_LIQUID'
-  }
+  },
+  {
+    puzzle: 'alchPortrait',
+    check: (prev, next) => !prev.featherTaken && next.featherTaken,
+    item: 'FEATHER'
+  },
+  {
+    puzzle: 'alchPortrait',
+    check: (prev, next) => !prev.goldTaken && next.goldTaken,
+    item: 'GOLD_NUGGET'
+  },
 ];
