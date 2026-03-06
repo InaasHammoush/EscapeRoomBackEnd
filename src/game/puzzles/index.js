@@ -16,7 +16,8 @@ import * as AlchEastSlidingLock from './alchemist_lab/alchEastSlidingLock.js';
 import * as AlchEastDoorSync from './alchemist_lab/alchEastDoorSync.js';
 import * as AlchLightBeamGrid from './alchemist_lab/alchLightBeamGrid.js';
 import * as FinalDoorWordSync from './final_corridor/finalDoorWordSync.js';
-import* as PortraitPuzzle from './alchemist_lab/PortraitPuzzle.js';
+import * as PortraitPuzzle from './alchemist_lab/PortraitPuzzle.js';
+import * as DrawerPuzzle from './alchemist_lab/DrawerPuzzle.js';
 
 // --- Wizard Modules ---
 import * as TicTacToe from './wizard_library/TicTacToe.js';
@@ -40,6 +41,7 @@ export function initAll() {
     alchPortraitBooks: AlchPortraitBooks.init(),
     alchFlaskTransfer: AlchFlaskTransfer.init(),
     alchPortrait: PortraitPuzzle.init(),
+    
     // Alchemy West
     alchMortarEssence: AlchMortarEssence.init(),
     alchKeyTransmutation: AlchKeyTransmutation.init(),
@@ -47,6 +49,7 @@ export function initAll() {
     // Alchemy North
     alchNorthHierarchyNote: AlchNorthHierarchyNote.init(),
     alchStatuePose: AlchStatuePose.init(),
+    alch_drawer_puzzle: DrawerPuzzle.init(),
     // Alchemy East
     alchEastSlidingLock: AlchEastSlidingLock.init(),
     alchEastDoorSync: AlchEastDoorSync.init(),
@@ -84,6 +87,7 @@ export function initAll() {
       // Alchemy North
       alchNorthHierarchyNote: AlchNorthHierarchyNote.exportPublic(internal.alchNorthHierarchyNote),
       alchStatuePose: AlchStatuePose.exportPublic(internal.alchStatuePose),
+      alch_drawer_puzzle: DrawerPuzzle.exportPublic(internal.alch_drawer_puzzle),
       // Alchemy East
       alchEastSlidingLock: AlchEastSlidingLock.exportPublic(internal.alchEastSlidingLock),
       alchEastDoorSync: AlchEastDoorSync.exportPublic(internal.alchEastDoorSync),
@@ -127,6 +131,7 @@ const DIRECT_OBJECT_ALIASES = Object.freeze({
   'alch:portrait-books': ['puzzle_portrait_books', 'alch:portrait-books'],
   'alch:portrait': ['puzzle_portrait_books', 'alch:portrait'],
   'alch:portrait-lady': ['puzzle_portrait_books', 'alch:portrait-lady'],
+  'alch:drawer': ['puzzle_drawer', 'alch:drawer'],
   'alch:flask-transfer': ['puzzle_flask_transfer', 'alch:flask-transfer'],
   'alch:flasks': ['puzzle_flask_transfer', 'alch:flasks'],
   'alch:flask-shelf': ['puzzle_flask_transfer', 'alch:flask-shelf'],
@@ -242,6 +247,9 @@ function routeWidgetTriggers(state, action) {
     trigger_key_vase: "vase_puzzle",
 
     // --- ALCHEMIST ---
+
+    trigger_drawer: 'alch_drawer_puzzle',
+
     trigger_mortar: 'alch:mortar',
     trigger_alch_mortar: 'alch:mortar',
 
@@ -328,6 +336,7 @@ function routePuzzleLogic(state, action, now) {
     puzzle_east_sliding_lock:    ['alchEastSlidingLock', AlchEastSlidingLock],
     puzzle_east_door_sync:       ['alchEastDoorSync', AlchEastDoorSync],
     puzzle_final_corridor:       ['finalCorridor', FinalDoorWordSync],
+    puzzle_drawer:               ['alch_drawer_puzzle', DrawerPuzzle],
   };
 
   const hit = puzzleMap[oid];

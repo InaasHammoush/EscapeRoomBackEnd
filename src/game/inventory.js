@@ -178,6 +178,7 @@ export function _normalizeItem(input) {
   if (['FEATHER', 'FEDER'].includes(raw)) return 'FEATHER';
   if (['COAL_BLOCK', 'COAL'].includes(raw)) return 'COAL_BLOCK';
   if (['MATCHES', 'STREICHHOLZ'].includes(raw)) return 'MATCHES';
+  if (['HIRACHY', 'HIERARCHY'].includes(raw)) return 'HIERARCHY';
 
   // Wizard Items
   if (['WHITE_ROSE', 'WHITEROSE'].includes(raw)) return 'WHITE_ROSE';

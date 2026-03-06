@@ -109,4 +109,9 @@ export const REWARD_RULES = [
     check: (prev, next) => !prev.goldTaken && next.goldTaken,
     item: 'GOLD_NUGGET'
   },
+  {
+    puzzle: 'alch_drawer_puzzle',
+    check: (prev, next) => !prev.scrollTaken && next.scrollTaken,
+    item: 'HIERARCHY'
+  },
 ];
