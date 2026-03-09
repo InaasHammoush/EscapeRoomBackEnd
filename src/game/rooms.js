@@ -17,6 +17,19 @@ import * as Inventory from './inventory.js';
 const { STARTER_INVENTORY, toPublicInventory, fromPublicInventory, cloneBag, normalizeActionItems, 
   ensureInventory, precheckInventoryForAction, applyInventoryBridge } = Inventory;
 
+const SOLO_CHAMBERS = Object.freeze(['wizard_library', 'alchemist_lab']);
+const ROOM_TYPE_ALIASES = Object.freeze({
+  default: 'default',
+  wizard: 'wizard_library',
+  wizard_library: 'wizard_library',
+  alchemist: 'alchemist_lab',
+  alchemist_lab: 'alchemist_lab',
+});
+const SOLO_CHAMBER_ALIASES = Object.freeze({
+  ...ROOM_TYPE_ALIASES,
+  default: 'wizard_library',
+});
+
 let roomStatsModulePromise = null;
 let roomStatsUnavailableGlobally = false;
 async function getRoomStatsModule() {
@@ -30,8 +43,103 @@ async function getRoomStatsModule() {
 }
 
 function getRoomViews(roomName) {
-  const viewsMap = roomImagesMapper[roomName] || roomImagesMapper.default || {};
+  const resolvedRoomName = normalizeDisplayRoomType(roomName, 'default');
+  const viewsMap = roomImagesMapper[resolvedRoomName] || roomImagesMapper.default || {};
   return Object.values(viewsMap);
+}
+
+function normalizeGameMode(value) {
+  return String(value ?? '').trim().toLowerCase() === 'solo' ? 'solo' : 'coop';
+}
+
+function normalizeDisplayRoomType(value, fallback = 'default') {
+  const raw = String(value ?? '').trim().toLowerCase();
+  const resolved = ROOM_TYPE_ALIASES[raw] || raw;
+  return roomImagesMapper[resolved] ? resolved : fallback;
+}
+
+function normalizeSoloChamber(value) {
+  const raw = String(value ?? '').trim().toLowerCase();
+  const resolved = SOLO_CHAMBER_ALIASES[raw] || raw;
+  return SOLO_CHAMBERS.includes(resolved) ? resolved : SOLO_CHAMBERS[0];
+}
+
+function normalizeViewIndex(value, roomType) {
+  const views = getRoomViews(roomType);
+  const modulo = Math.max(1, views.length);
+  const parsed = Number.parseInt(String(value ?? 0), 10);
+  if (!Number.isFinite(parsed)) return 0;
+  return ((Math.floor(parsed) % modulo) + modulo) % modulo;
+}
+
+function buildChamberState(roomType, viewIndex = 0) {
+  const resolvedRoomType = normalizeDisplayRoomType(roomType, roomType);
+  const views = getRoomViews(resolvedRoomType);
+  return {
+    roomType: resolvedRoomType,
+    viewIndex: normalizeViewIndex(viewIndex, resolvedRoomType),
+    views,
+  };
+}
+
+function buildPresentationState(publicState, fallbackRoomName = 'default') {
+  const pub = publicState && typeof publicState === 'object' ? publicState : {};
+  const mode = normalizeGameMode(pub.mode);
+
+  if (mode === 'solo') {
+    const activeChamber = normalizeSoloChamber(pub.activeChamber || pub.roomType || fallbackRoomName);
+    const wizardViewIndex =
+      activeChamber === 'wizard_library'
+        ? pub.viewIndex
+        : pub?.chambers?.wizard_library?.viewIndex;
+    const alchemistViewIndex =
+      activeChamber === 'alchemist_lab'
+        ? pub.viewIndex
+        : pub?.chambers?.alchemist_lab?.viewIndex;
+    const chambers = {
+      wizard_library: buildChamberState('wizard_library', wizardViewIndex),
+      alchemist_lab: buildChamberState('alchemist_lab', alchemistViewIndex),
+    };
+    const activeState = chambers[activeChamber];
+    return {
+      ...pub,
+      mode,
+      activeChamber,
+      availableChambers: [...SOLO_CHAMBERS],
+      chambers,
+      roomType: activeState.roomType,
+      views: [...activeState.views],
+      viewIndex: activeState.viewIndex,
+    };
+  }
+
+  const roomType = normalizeDisplayRoomType(pub.roomType || fallbackRoomName, 'default');
+  const currentState = buildChamberState(
+    roomType,
+    pub?.chambers?.[roomType]?.viewIndex ?? pub.viewIndex
+  );
+  return {
+    ...pub,
+    mode,
+    activeChamber: roomType,
+    availableChambers: [roomType],
+    chambers: { [roomType]: currentState },
+    roomType,
+    views: [...currentState.views],
+    viewIndex: currentState.viewIndex,
+  };
+}
+
+function presentationDiff(publicState) {
+  return {
+    mode: publicState.mode,
+    activeChamber: publicState.activeChamber,
+    availableChambers: [...(publicState.availableChambers || [])],
+    chambers: JSON.parse(JSON.stringify(publicState.chambers || {})),
+    roomType: publicState.roomType,
+    views: [...(publicState.views || [])],
+    viewIndex: Number(publicState.viewIndex || 0),
+  };
 }
 
 export class RoomManager {
@@ -73,10 +181,26 @@ export class RoomManager {
   // ----------------------------------------------------------
 
   /** Neuen Raum erzeugen (unstarted, leere Spielerliste, initialer Puzzle-State) */
-  createRoom(roomName = 'default') {
+  createRoom(roomName = 'default', options = {}) {
     const id = crypto.randomUUID();
     const puzzleInit = Puzzles.initAll();
     const starterBag = cloneBag(STARTER_INVENTORY);
+    const mode = normalizeGameMode(options?.mode);
+    const initialRoomType = mode === 'solo'
+      ? normalizeSoloChamber(options?.startingChamber || roomName)
+      : normalizeDisplayRoomType(roomName, 'default');
+    const publicState = buildPresentationState({
+      ...puzzleInit.public,
+      mode,
+      roomType: initialRoomType,
+      viewIndex: 0,
+      alchDoorState: null,
+      inventory: toPublicInventory(starterBag),
+      game: {
+        status: 'running',
+        endedAt: null,
+      },
+    }, initialRoomType);
 
     const room = {
       id,
@@ -90,18 +214,7 @@ export class RoomManager {
       completedAt: null,
       players: new Map(), // socketId -> { name, ready, profileId? }
       state: {
-        public: {
-          ...puzzleInit.public,
-          viewIndex: 0, // 0=N, 1=E, 2=S, 3=W
-          roomType: roomName, // for client to pick images
-          views: getRoomViews(roomName),
-          alchDoorState: null,
-          inventory: toPublicInventory(starterBag),
-          game: {
-            status: 'running',
-            endedAt: null,
-          },
-        },
+        public: publicState,
         internal: {
           ...puzzleInit.internal,
           inventory: starterBag,
@@ -238,13 +351,17 @@ export class RoomManager {
 
     ensureInventory(room);
 
+    room.state.public = buildPresentationState(room.state.public, room.roomName);
     const pub = room.state.public;
     if (direction === 'LEFT') {
-      pub.viewIndex = (pub.viewIndex + 3) % 4;
+      pub.viewIndex = normalizeViewIndex(pub.viewIndex - 1, pub.roomType);
     } else if (direction === 'RIGHT') {
-      pub.viewIndex = (pub.viewIndex + 1) % 4;
+      pub.viewIndex = normalizeViewIndex(pub.viewIndex + 1, pub.roomType);
     } else {
       return { ok: false, error: 'INVALID_DIRECTION' };
+    }
+    if (pub.activeChamber && pub.chambers?.[pub.activeChamber]) {
+      pub.chambers[pub.activeChamber].viewIndex = pub.viewIndex;
     }
 
     this._touchSeq(room);
@@ -252,6 +369,34 @@ export class RoomManager {
     this._persistLocal(id);
 
     return { ok: true, seq: room.seq, diff: { viewIndex: pub.viewIndex } };
+  }
+
+  switchChamber(id, chamber) {
+    const room = this.get(id);
+    if (!room) return { ok: false, error: 'ROOM_NOT_FOUND' };
+
+    room.state.public = buildPresentationState(room.state.public, room.roomName);
+    const pub = room.state.public;
+    if (pub.mode !== 'solo') {
+      return { ok: false, error: 'ROOM_SWITCH_NOT_AVAILABLE' };
+    }
+
+    const targetChamber = normalizeSoloChamber(chamber);
+    if (targetChamber === pub.activeChamber) {
+      return { ok: true, seq: room.seq, diff: presentationDiff(pub) };
+    }
+
+    const chamberState = pub.chambers?.[targetChamber] || buildChamberState(targetChamber, 0);
+    pub.activeChamber = targetChamber;
+    pub.roomType = chamberState.roomType;
+    pub.views = [...chamberState.views];
+    pub.viewIndex = chamberState.viewIndex;
+
+    this._touchSeq(room);
+    this._saveSnapshot(id).catch(() => {});
+    this._persistLocal(id);
+
+    return { ok: true, seq: room.seq, diff: presentationDiff(pub) };
   }
 
   /**
@@ -515,6 +660,10 @@ export class RoomManager {
     const puzzleInit = Puzzles.initAll();
     const inventoryBag =
       fromPublicInventory(data?.state?.inventory) || cloneBag(STARTER_INVENTORY);
+    const publicState = buildPresentationState(
+      data?.state ?? puzzleInit.public,
+      data?.state?.roomType || 'default'
+    );
 
     const room = {
       id,
@@ -528,7 +677,7 @@ export class RoomManager {
       completedAt: null,
       players: new Map(), // wird bei Rejoin neu aufgebaut
       state: {
-        public: data.state ?? puzzleInit.public,
+        public: publicState,
         internal: {
           ...puzzleInit.internal,
           inventory: Object.keys(inventoryBag).length > 0 ? inventoryBag : cloneBag(STARTER_INVENTORY),

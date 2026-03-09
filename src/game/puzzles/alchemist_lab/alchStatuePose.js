@@ -10,7 +10,7 @@ const VALID_OBJECTS = new Set([
 
 const TARGET_POSE = Object.freeze({
   leftArm: 'HALF_UP',   // linker Arm halb oben
-  rightArm: 'ON_CHEST', // rechte Hand auf Brust
+  rightArm: 'FULL_UP',  // rechter Arm ganz oben
   head: 'UP',           // Kopf nach oben
 });
 
@@ -224,8 +224,7 @@ function normalizeLeftArm(v) {
 function normalizeRightArm(v) {
   const raw = String(v ?? '').trim().toUpperCase();
   if (['DOWN', 'UNTEN'].includes(raw)) return 'DOWN';
-  if (['ON_CHEST', 'CHEST', 'BRUST', 'AUF_BRUST'].includes(raw)) return 'ON_CHEST';
-  if (['UP', 'OBEN'].includes(raw)) return 'UP';
+  if (['FULL_UP', 'FULLUP', 'GANZ_OBEN', 'GANZOBEN', 'UP', 'OBEN', 'ON_CHEST', 'CHEST', 'BRUST', 'AUF_BRUST'].includes(raw)) return 'FULL_UP';
   return null;
 }
 

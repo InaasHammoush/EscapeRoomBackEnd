@@ -19,6 +19,8 @@ async function startRoom(rm, roomId) {
   throw new Error('RoomManager has neither start() nor startRoom()');
 }
 
+const SLIDING_LOCK_SOLUTION = [1, 2, 3, 5, 6, 8, 5, 6];
+
 function getRoom(rm, roomId) {
   if (rm.rooms?.get) return rm.rooms.get(roomId);
   if (typeof rm.getRoom === 'function') return rm.getRoom(roomId);
@@ -40,13 +42,15 @@ test('East wall: sliding lock + key insert + sync press opens door', async () =>
   // ensure key exists for insert test
   live.state.internal.inventory.GOLDEN_KEY = 1;
 
-  // 1) solve 3x3 slider (default board: [1,2,3,4,5,6,0,7,8])
-  let r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-sliding-lock', 'move', { tile: 7 }));
-  assert.equal(r.ok, true, r.error);
-
-  r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-sliding-lock', 'move', { tile: 8 }));
+  // 1) solve 3x3 slider from the harder default board
+  let r;
+  for (const tile of SLIDING_LOCK_SOLUTION) {
+    r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-sliding-lock', 'move', { tile }));
+    assert.equal(r.ok, true, r?.error);
+  }
   assert.equal(r.ok, true, r.error);
   assert.equal(!!live.state.public?.alchEastSlidingLock?.solved, true);
+  assert.equal(Number(live.state.public?.alchEastSlidingLock?.moves || 0), 8);
 
   // 2) simulate runes activated (light-beam solved)
   live.state.public.alchLightBeamGrid ??= {};

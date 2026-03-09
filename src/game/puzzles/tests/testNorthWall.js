@@ -23,7 +23,7 @@ const nextState = (res) => res?.nextState ?? res?.state;
   let r = Statue.apply(s, {
     objectId: 'alch:statue',
     verb: 'set_pose',
-    data: { leftArm: 'HALF_UP', rightArm: 'ON_CHEST', head: 'UP' },
+    data: { leftArm: 'HALF_UP', rightArm: 'FULL_UP', head: 'UP' },
   });
   assert.equal(r.ok, true);
   s = nextState(r);
@@ -33,7 +33,7 @@ const nextState = (res) => res?.nextState ?? res?.state;
   r = Statue.apply(s, {
     objectId: 'alch:statue',
     verb: 'insert',
-    data: { item: 'FEATHER' },
+    data: { item: 'FEATHER', ear: 'LEFT' },
   });
   assert.equal(r.ok, true);
   s = nextState(r);

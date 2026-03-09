@@ -14,6 +14,8 @@ function mkAction(playerId, objectId, verb, data = {}) {
   };
 }
 
+const SLIDING_LOCK_SOLUTION = [1, 2, 3, 5, 6, 8, 5, 6];
+
 async function startRoom(rm, roomId) {
   if (typeof rm.start === 'function') return rm.start(roomId);
   if (typeof rm.startRoom === 'function') return rm.startRoom(roomId);
@@ -52,10 +54,10 @@ test('Final corridor flow: runes -> keyword -> sync plates -> win', async () => 
   // Alchemist final prerequisite: east door flow
   live.state.internal.inventory.GOLDEN_KEY = 1;
 
-  r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-sliding-lock', 'move', { tile: 7 }));
-  assert.equal(r.ok, true, r.error);
-  r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-sliding-lock', 'move', { tile: 8 }));
-  assert.equal(r.ok, true, r.error);
+  for (const tile of SLIDING_LOCK_SOLUTION) {
+    r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-sliding-lock', 'move', { tile }));
+    assert.equal(r.ok, true, r.error);
+  }
 
   live.state.public.alchLightBeamGrid ??= {};
   live.state.public.alchLightBeamGrid.solved = true;

@@ -15,7 +15,9 @@ const passwordSchema = z
 
 export const schemas = {
   CreateRoom: z.object({
-    roomName: z.string().min(1).max(32)
+    roomName: z.string().min(1).max(32),
+    mode: z.enum(['coop', 'solo']).optional(),
+    startingChamber: z.string().min(1).max(32).optional(),
   }),
   JoinRoom: z.object({
     roomId: z.uuid(),
@@ -39,6 +41,10 @@ export const schemas = {
   Turn: z.object({
     roomId: z.uuid(),
     direction: z.enum(['LEFT','RIGHT'])
+  }),
+  SwitchRoom: z.object({
+    roomId: z.uuid(),
+    chamber: z.string().min(1).max(32),
   })
 };
 

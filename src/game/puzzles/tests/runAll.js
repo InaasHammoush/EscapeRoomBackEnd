@@ -9,6 +9,7 @@ const testFiles = [
   'testWestWallFlow.js',
   'testNorthWall.js',
   'testLightBeamGrid.js',
+  'testSoloModeFlow.js',
   'testEastWallFlow.js', // <-- neu
   'testFinalCorridorFlow.js',
 ];
