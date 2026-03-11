@@ -224,6 +224,7 @@ function normalizeLeftArm(v) {
 function normalizeRightArm(v) {
   const raw = String(v ?? '').trim().toUpperCase();
   if (['DOWN', 'UNTEN'].includes(raw)) return 'DOWN';
+  if (['HALF_UP', 'HALFUP', 'HALB_OBEN', 'HALBOBEN'].includes(raw)) return 'HALF_UP';
   if (['FULL_UP', 'FULLUP', 'GANZ_OBEN', 'GANZOBEN', 'UP', 'OBEN', 'ON_CHEST', 'CHEST', 'BRUST', 'AUF_BRUST'].includes(raw)) return 'FULL_UP';
   return null;
 }
