@@ -14,16 +14,58 @@ import { enqueueScoreEvent } from '../infra/outbox.js'; // optional – nur genu
 import { roomImagesMapper } from '../data/roomImagesMapper.js';
 import * as Inventory from './inventory.js';
 
-const { STARTER_INVENTORY, toPublicInventory, fromPublicInventory, cloneBag, normalizeActionItems, 
-  ensureInventory, precheckInventoryForAction, applyInventoryBridge } = Inventory;
+const { STARTER_INVENTORY, toPublicInventory, fromPublicInventory, cloneBag, normalizeActionItems,
+  ensureInventory, precheckInventoryForAction, applyInventoryBridge, getInventoryForPlayer } = Inventory;
 
-const SOLO_CHAMBERS = Object.freeze(['wizard_library', 'alchemist_lab']);
+const SOLO_CHAMBERS = Object.freeze(['wizard_library', 'alchemist_lab', 'corridor']);
+const DOOR_SYNC_WINDOW_MS = 2000;
+const COOP_ROLE_TO_CHAMBER = Object.freeze({
+  A: 'wizard_library',
+  B: 'alchemist_lab',
+});
+
+const SHARED_PUBLIC_KEYS = new Set([
+  'game',
+  'corridorUnlocked',
+  'corridorUnlockedAt',
+  'finalCorridor',
+]);
+
+const WIZARD_PUBLIC_KEYS = new Set([
+  'tictactoe_scroll',
+  'bookshelf_puzzle',
+  'candle_puzzle',
+  'transformation_table_puzzle',
+  'merlin_scale',
+  'vase_puzzle',
+  'recipe_hint',
+  'door_seal',
+]);
+
+const ALCHEMIST_PUBLIC_KEYS = new Set([
+  'alchPortraitBooks',
+  'alchFlaskTransfer',
+  'alchPortrait',
+  'alchMortarEssence',
+  'alch:mortar',
+  'alchKeyTransmutation',
+  'alchWestCodeboxJigsaw',
+  'alchNorthHierarchyNote',
+  'alchStatuePose',
+  'alch_drawer_puzzle',
+  'alchEastSlidingLock',
+  'alchEastDoorSync',
+  'alchLightBeamGrid',
+  'alchDoorState',
+  'doorState',
+]);
 const ROOM_TYPE_ALIASES = Object.freeze({
   default: 'default',
   wizard: 'wizard_library',
   wizard_library: 'wizard_library',
   alchemist: 'alchemist_lab',
   alchemist_lab: 'alchemist_lab',
+  corridor: 'corridor',
 });
 const SOLO_CHAMBER_ALIASES = Object.freeze({
   ...ROOM_TYPE_ALIASES,
@@ -62,6 +104,35 @@ function normalizeSoloChamber(value) {
   const raw = String(value ?? '').trim().toLowerCase();
   const resolved = SOLO_CHAMBER_ALIASES[raw] || raw;
   return SOLO_CHAMBERS.includes(resolved) ? resolved : SOLO_CHAMBERS[0];
+}
+
+function chamberForRole(role, fallback = 'wizard_library') {
+  if (!role) return fallback;
+  const key = String(role).trim().toUpperCase();
+  return COOP_ROLE_TO_CHAMBER[key] || fallback;
+}
+
+function filterPublicStateForChamber(pub, chamber) {
+  const filtered = {};
+  for (const [key, value] of Object.entries(pub || {})) {
+    if (SHARED_PUBLIC_KEYS.has(key)) {
+      filtered[key] = value;
+      continue;
+    }
+    if (chamber === 'wizard_library' && WIZARD_PUBLIC_KEYS.has(key)) {
+      filtered[key] = value;
+      continue;
+    }
+    if (chamber === 'alchemist_lab' && ALCHEMIST_PUBLIC_KEYS.has(key)) {
+      filtered[key] = value;
+      continue;
+    }
+    if (chamber === 'corridor' && key === 'finalCorridor') {
+      filtered[key] = value;
+      continue;
+    }
+  }
+  return filtered;
 }
 
 function normalizeViewIndex(value, roomType) {
@@ -105,7 +176,9 @@ function buildPresentationState(publicState, fallbackRoomName = 'default') {
       ...pub,
       mode,
       activeChamber,
-      availableChambers: [...SOLO_CHAMBERS],
+      availableChambers: corridorUnlocked(pub)
+        ? [...SOLO_CHAMBERS]
+        : ['wizard_library', 'alchemist_lab'],
       chambers,
       roomType: activeState.roomType,
       views: [...activeState.views],
@@ -196,8 +269,11 @@ export class RoomManager {
       viewIndex: 0,
       alchDoorState: null,
       inventory: toPublicInventory(starterBag),
+      corridorUnlocked: false,
+      corridorUnlockedAt: null,
       game: {
         status: 'running',
+        startedAt: null,
         endedAt: null,
       },
     }, initialRoomType);
@@ -228,6 +304,7 @@ export class RoomManager {
       opened: !!initialDoorState.open,
       updatedAt: initialDoorState.updatedAt,
     };
+    this._updateCorridorAccess(room);
     this._syncFinalCorridorState(room);
     this._updateGameStatus(room);
     this.rooms.set(id, room);
@@ -254,6 +331,7 @@ export class RoomManager {
       players: [...room.players.values()].map((p) => ({
         name: p.name,
         ready: !!p.ready,
+        role: p.role || null,
       })),
       state: room.state.public, // nur öffentlicher Teil
     };
@@ -264,21 +342,84 @@ export class RoomManager {
     return this.publicRoom(id);
   }
 
+  /** Snapshot für einen bestimmten Socket (role-/view-spezifisch in Coop) */
+  snapshotFor(id, socketId) {
+    const room = this.get(id);
+    if (!room) return null;
+    const base = this.publicRoom(id);
+    if (!base) return null;
+    const pub = { ...(room.state.public || {}) };
+    const mode = normalizeGameMode(pub.mode);
+
+    if (mode !== 'coop') {
+      return {
+        ...base,
+        state: buildPresentationState(pub, room.roomName),
+      };
+    }
+
+    const player = room.players.get(socketId);
+    let chamber = chamberForRole(player?.role, room.roomName || 'wizard_library');
+    if (pub.corridorUnlocked) {
+      chamber = 'corridor';
+    }
+    if (player && player.chamber !== chamber) player.chamber = chamber;
+    const chamberState = buildChamberState(chamber, player?.viewIndex ?? 0);
+    const filtered = filterPublicStateForChamber(pub, chamber);
+    filtered.inventory = toPublicInventory(getInventoryForPlayer(room, socketId));
+
+    const activeWidgetByPlayer = room.state.internal?.activeWidgetByPlayer;
+    if (activeWidgetByPlayer && activeWidgetByPlayer.has(socketId)) {
+      filtered.activeWidget = activeWidgetByPlayer.get(socketId);
+      activeWidgetByPlayer.delete(socketId);
+    }
+
+    const coopState = {
+      ...filtered,
+      mode: 'coop',
+      activeChamber: chamber,
+      availableChambers: [chamber],
+      chambers: { [chamber]: chamberState },
+      roomType: chamberState.roomType,
+      views: [...chamberState.views],
+      viewIndex: chamberState.viewIndex,
+    };
+
+    return {
+      ...base,
+      state: coopState,
+    };
+  }
+
   /** Spieler beitreten lassen (mit optionaler Profil-ID) */
-  async joinRoom(id, socketId, name = 'Player', profileId = null) {
+  async joinRoom(id, socketId, name = 'Player', profileId = null, role = null) {
     if (!this.rooms.has(id) && this.redis) {
       await this.loadSnapshot(id);
     }
     const room = this.get(id);
     if (!room) throw new Error('ROOM_NOT_FOUND');
 
-    ensureInventory(room);
+    ensureInventory(room, socketId);
 
     const now = Date.now();
+    const mode = normalizeGameMode(room.state.public?.mode);
+    let playerRole = role ? String(role).trim().toUpperCase() : null;
+    if (mode === 'coop' && !playerRole) {
+      const existingRoles = new Set([...room.players.values()].map((p) => p.role).filter(Boolean));
+      if (!existingRoles.has('A')) playerRole = 'A';
+      else if (!existingRoles.has('B')) playerRole = 'B';
+    }
+    const initialChamber = mode === 'coop'
+      ? chamberForRole(playerRole, room.roomName || 'wizard_library')
+      : room.roomName;
+
     room.players.set(socketId, {
       name: String(name),
       ready: false,
       profileId: profileId || null,
+      role: playerRole || null,
+      chamber: initialChamber,
+      viewIndex: 0,
       joinedAt: now, // Join-Zeit für Stats
     });
 
@@ -332,6 +473,11 @@ export class RoomManager {
 
       room.started = true;
       room.startedAt = Date.now();
+      if (!room.state.public.game) {
+        room.state.public.game = { status: 'running', startedAt: room.startedAt, endedAt: null };
+      } else {
+        room.state.public.game.startedAt = room.state.public.game.startedAt || room.startedAt;
+      }
       this._touchSeq(room);
       this._saveSnapshot(id).catch(() => {});
       this._persistLocal(id);
@@ -344,12 +490,26 @@ export class RoomManager {
     return room;
   }
 
-  applyViewRotation(id, { direction }) {
+  applyViewRotation(id, { direction, socketId }) {
     const room = this.get(id);
     if (!room) return { ok: false, error: 'ROOM_NOT_FOUND' };
     if (!room.started) return { ok: false, error: 'ROOM_NOT_RUNNING' };
 
-    ensureInventory(room);
+    ensureInventory(room, socketId);
+
+    const mode = normalizeGameMode(room.state.public?.mode);
+    if (mode === 'coop') {
+      const player = socketId ? room.players.get(socketId) : null;
+      if (!player) return { ok: false, error: 'PLAYER_NOT_FOUND' };
+      const chamber = player.chamber || chamberForRole(player.role, room.roomName || 'wizard_library');
+      const delta = direction === 'LEFT' ? -1 : direction === 'RIGHT' ? 1 : null;
+      if (delta === null) return { ok: false, error: 'INVALID_DIRECTION' };
+      player.viewIndex = normalizeViewIndex((player.viewIndex ?? 0) + delta, chamber);
+      this._touchSeq(room);
+      this._saveSnapshot(id).catch(() => {});
+      this._persistLocal(id);
+      return { ok: true, seq: room.seq, diff: { viewIndex: player.viewIndex } };
+    }
 
     room.state.public = buildPresentationState(room.state.public, room.roomName);
     const pub = room.state.public;
@@ -382,6 +542,9 @@ export class RoomManager {
     }
 
     const targetChamber = normalizeSoloChamber(chamber);
+    if (targetChamber === 'corridor' && !corridorUnlocked(pub)) {
+      return { ok: false, error: 'CORRIDOR_LOCKED' };
+    }
     if (targetChamber === pub.activeChamber) {
       return { ok: true, seq: room.seq, diff: presentationDiff(pub) };
     }
@@ -411,7 +574,7 @@ export class RoomManager {
     if (!room.started) return { ok: false, error: 'ROOM_NOT_RUNNING' };
     if (room.completed) return { ok: false, error: 'ROOM_ALREADY_COMPLETED' };
 
-    ensureInventory(room);
+    ensureInventory(room, action?.playerId || null);
 
     // 1) Normalize (Inventory.js)
     const normalizedAction = normalizeActionItems(action);
@@ -425,7 +588,15 @@ export class RoomManager {
 
     // 3) Autoritativen Zustand übernehmen
     room.state = res.nextState;
-    ensureInventory(room);
+    ensureInventory(room, action?.playerId || null);
+
+    if (normalizeGameMode(room.state.public?.mode) === 'coop' && res?.diff?.activeWidget) {
+      if (!room.state.internal.activeWidgetByPlayer) {
+        room.state.internal.activeWidgetByPlayer = new Map();
+      }
+      room.state.internal.activeWidgetByPlayer.set(action.playerId, res.diff.activeWidget);
+      delete res.diff.activeWidget;
+    }
 
     // 4) Inventory Bridge (Inventory.js)    
     const invChanged = this._applyInventoryBridge(room, prevPublic, normalizedAction);
@@ -436,6 +607,7 @@ export class RoomManager {
     const wizDoorDiff = this._checkWizardDoorTriggers(room);
     // B. Alchemist Door
     const alchDoorChanged = this._updateAlchemistDoorState(room, normalizedAction);
+    const corridorChanged = this._updateCorridorAccess(room);
     // C. Final corridor runes + win state
     const finalCorridorChanged = this._syncFinalCorridorState(room);
     const gameChanged = this._updateGameStatus(room);
@@ -453,6 +625,11 @@ export class RoomManager {
     if (alchDoorChanged) {
         diff.alchDoorState = room.state.public.alchDoorState;
         diff.doorState = room.state.public.doorState;
+    }
+    if (corridorChanged) {
+        diff.corridorUnlocked = room.state.public.corridorUnlocked;
+        diff.corridorUnlockedAt = room.state.public.corridorUnlockedAt;
+        diff.availableChambers = [...(room.state.public.availableChambers || [])];
     }
     if (finalCorridorChanged) diff.finalCorridor = room.state.public.finalCorridor;
     if (gameChanged) diff.game = room.state.public.game;
@@ -485,7 +662,8 @@ export class RoomManager {
       if (keyInserted && gameSolved && !alreadyOpen) {
         room.state.internal.door_seal.openable = true;
         room.state.public.door_seal.openable = true;
-        diff.door_seal = { ...pub.door_seal, openable: true };
+        room.state.public.door_seal.openableAt = Date.now();
+        diff.door_seal = { ...pub.door_seal, openable: true, openableAt: room.state.public.door_seal.openableAt };
       }
     }
     return diff;
@@ -588,6 +766,46 @@ export class RoomManager {
     }
 
     return false;
+  }
+
+  _updateCorridorAccess(room) {
+    const pub = room?.state?.public;
+    if (!pub) return false;
+
+    const wizardReady = corridorWizardReady(pub);
+    const alchReady = corridorAlchemistReady(pub);
+    const bothReady = wizardReady && alchReady;
+
+    let unlocked = false;
+    if (pub.mode === 'solo') {
+      unlocked = bothReady;
+    } else {
+      const wizardAt = Number(pub?.door_seal?.openableAt || 0);
+      const alchAt = Number(pub?.alchDoorState?.updatedAt || 0);
+      unlocked = bothReady && wizardAt > 0 && alchAt > 0 && Math.abs(wizardAt - alchAt) <= DOOR_SYNC_WINDOW_MS;
+    }
+
+    const prev = !!pub.corridorUnlocked;
+    if (unlocked && !prev) {
+      pub.corridorUnlocked = true;
+      pub.corridorUnlockedAt = Date.now();
+      if (pub.mode === 'coop') {
+        for (const player of room.players.values()) {
+          player.chamber = 'corridor';
+          player.viewIndex = 0;
+        }
+      }
+    } else if (!unlocked && !prev) {
+      pub.corridorUnlocked = false;
+    }
+
+    if (pub.mode === 'solo') {
+      pub.availableChambers = corridorUnlocked(pub)
+        ? [...SOLO_CHAMBERS]
+        : ['wizard_library', 'alchemist_lab'];
+    }
+
+    return !!pub.corridorUnlocked !== prev;
   }
 
   // ----------------------------------------------------------
@@ -701,6 +919,11 @@ export class RoomManager {
       opened: !!restoredDoorState.open,
       updatedAt: restoredDoorState.updatedAt,
     };
+    if (room.state.public.corridorUnlocked === undefined) {
+      room.state.public.corridorUnlocked = false;
+      room.state.public.corridorUnlockedAt = null;
+    }
+    this._updateCorridorAccess(room);
     this._syncFinalCorridorState(room);
     this._updateGameStatus(room);
     this.rooms.set(id, room);
@@ -803,4 +1026,23 @@ function defaultCompletionPredicate(state) {
   } catch {
     return false;
   }
+}
+
+function corridorWizardReady(pub) {
+  const doorSeal = pub?.door_seal || {};
+  const scrollSolved = !!(pub?.scroll_grid?.solved || pub?.tictactoe_scroll?.solved);
+  return !!(
+    doorSeal.openable ||
+    doorSeal.opened ||
+    doorSeal.solved ||
+    (doorSeal.hasKey && scrollSolved)
+  );
+}
+
+function corridorAlchemistReady(pub) {
+  return !!(pub?.alchDoorState?.open || pub?.alchEastDoorSync?.opened);
+}
+
+function corridorUnlocked(pub) {
+  return !!pub?.corridorUnlocked;
 }

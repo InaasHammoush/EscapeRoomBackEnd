@@ -21,7 +21,8 @@ export const schemas = {
   }),
   JoinRoom: z.object({
     roomId: z.uuid(),
-    name: z.string().min(1).max(32)
+    name: z.string().min(1).max(32),
+    role: z.string().min(1).max(32).optional(),
   }),
   Ready: z.object({
     roomId: z.uuid(),

@@ -97,7 +97,7 @@ export function initAll() {
       tictactoe_scroll: TicTacToe.exportPublic(internal.tictactoe_scroll),
       bookshelf_puzzle: Bookshelf.exportPublic(internal.bookshelf_puzzle),
       candle_puzzle: CandlePuzzle.exportPublic(internal.candle_puzzle),
-      transformation_table: transformationTable.exportPublic(internal.transformation_table),
+      transformation_table_puzzle: transformationTable.exportPublic(internal.transformation_table_puzzle),
       merlin_scale: MerlinScale.exportPublic(internal.merlin_scale),
       vase_puzzle: VasePuzzle.exportPublic(internal.vase_puzzle),
       recipe_hint: RecipeHint.exportPublic(internal.recipe_hint),
