@@ -34,11 +34,15 @@ export const REWARD_RULES = [
   },
 
   // --- Alchemist ---
-  
   // 1. Mortar (Blue Liquid)
   {
     puzzle: 'alchMortarEssence',
-    check: (prev, next) => !prev.output?.blueLiquidReady && next.output?.blueLiquidReady,
+    check: (prev, next) => !prev.inserted?.greenLiquid && next.inserted?.greenLiquid,
+    item: 'EMPTY_BOTTLE'
+  },
+  {
+    puzzle: 'alchMortarEssence',
+    check: (prev, next) => !prev.output?.blueLiquidTaken && next.output?.blueLiquidTaken,
     item: 'BLUE_LIQUID'
   },
   // 2. Transmuter (Golden Key)
@@ -52,6 +56,12 @@ export const REWARD_RULES = [
     puzzle: 'alchLightBeamGrid',
     check: (prev, next) => !prev.solved && next.solved,
     item: 'LIGHT_SIGIL'
+  },
+  // 3b. Statue pose (Flamma Note)
+  {
+    puzzle: 'alchStatuePose',
+    check: (prev, next) => !prev.output?.noteTaken && next.output?.noteTaken,
+    item: 'NOTE_FLAMMA'
   },
   // 4. Portrait (Feather + Gold)
   {
@@ -88,5 +98,20 @@ export const REWARD_RULES = [
     puzzle: 'alchFlaskTransfer',
     check: (prev, next) => (!prev.output?.greenLiquidReady && next.output?.greenLiquidReady) || (!prev.solved && next.solved),
     item: 'GREEN_LIQUID'
-  }
+  },
+  {
+    puzzle: 'alchPortrait',
+    check: (prev, next) => !prev.featherTaken && next.featherTaken,
+    item: 'FEATHER'
+  },
+  {
+    puzzle: 'alchPortrait',
+    check: (prev, next) => !prev.goldTaken && next.goldTaken,
+    item: 'GOLD_NUGGET'
+  },
+  {
+    puzzle: 'alch_drawer_puzzle',
+    check: (prev, next) => !prev.scrollTaken && next.scrollTaken,
+    item: 'HIERARCHY'
+  },
 ];

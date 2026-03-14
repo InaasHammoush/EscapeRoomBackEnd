@@ -5,9 +5,9 @@ const SIZE = 3;
 const SOLVED_BOARD = [1, 2, 3, 4, 5, 6, 7, 8, 0];
 const VALID_OBJECTS = new Set(['alch:east-codebox', 'alch:east-jigsaw', 'alch:east-sliding-lock']);
 
-// Solvable Start (2 moves away):
-// move tile 7, then 8 -> solved
-const DEFAULT_BOARD = [1, 2, 3, 4, 5, 6, 0, 7, 8];
+// Solvable start with shortest-path distance 8 to the solved board.
+// One shortest solution is: 1 -> 2 -> 3 -> 5 -> 6 -> 8 -> 5 -> 6
+const DEFAULT_BOARD = [0, 1, 2, 4, 8, 3, 7, 6, 5];
 
 function clone(obj) {
   if (globalThis.structuredClone) return structuredClone(obj);
@@ -20,6 +20,13 @@ function fail(state, error) {
 
 function ok(nextState, diff = {}) {
   return { ok: true, error: null, nextState, diff };
+}
+
+function exportDiff(state, extra = {}) {
+  return {
+    alchEastSlidingLock: exportPublic(state),
+    ...extra,
+  };
 }
 
 function isSolved(board) {
@@ -76,13 +83,13 @@ export function apply(state, action) {
   if (verb === 'interact' || verb === 'inspect' || verb === 'open') {
     return ok(next, {
       activeWidget: WIDGET_ID,
-      [WIDGET_ID]: exportPublic(next),
+      ...exportDiff(next),
     });
   }
 
   if (verb === 'reset') {
     const reset = init();
-    return ok(reset, { solved: reset.solved, board: reset.board, lockVisible: reset.lockVisible });
+    return ok(reset, exportDiff(reset));
   }
 
   if (!['move', 'slide', 'click'].includes(verb)) {
@@ -130,9 +137,6 @@ export function apply(state, action) {
   }
 
   return ok(next, {
-    board: [...next.board],
-    moves: next.moves,
-    solved: next.solved,
-    lockVisible: next.lockVisible
+    ...exportDiff(next),
   });
 }

@@ -54,6 +54,10 @@ const VALID_OBJECTS = new Set([
   ...GENERIC_PLATE_OBJECTS,
 ]);
 
+function isSoloMode(ctx) {
+  return String(ctx?.public?.mode || '').trim().toLowerCase() === 'solo';
+}
+
 export function init() {
   return {
     wizardRunes: [...WIZARD_RUNES],
@@ -185,7 +189,10 @@ export function apply(state, action, now, ctx = {}) {
   const playerId = String(action?.playerId || '').trim();
   if (!playerId) return fail(state, 'MISSING_PLAYER_ID');
 
-  purgeExpiredPlates(next, nowMs);
+  const soloMode = isSoloMode(ctx);
+  if (!soloMode) {
+    purgeExpiredPlates(next, nowMs);
+  }
 
   next.plates[plateSide] = {
     playerId,
@@ -197,12 +204,12 @@ export function apply(state, action, now, ctx = {}) {
     const right = next.plates.right;
     const delta = Math.abs(Number(left.pressedAt || 0) - Number(right.pressedAt || 0));
 
-    if (left.playerId === right.playerId) {
+    if (!soloMode && left.playerId === right.playerId) {
       next.lastError = 'PLATES_REQUIRE_DISTINCT_PLAYERS';
       return ok(next);
     }
 
-    if (delta <= next.syncWindowMs) {
+    if (soloMode || delta <= next.syncWindowMs) {
       next.finalDoorOpen = true;
       next.solved = true;
       next.wonAt = nowMs;

@@ -16,6 +16,8 @@ import * as AlchEastSlidingLock from './alchemist_lab/alchEastSlidingLock.js';
 import * as AlchEastDoorSync from './alchemist_lab/alchEastDoorSync.js';
 import * as AlchLightBeamGrid from './alchemist_lab/alchLightBeamGrid.js';
 import * as FinalDoorWordSync from './final_corridor/finalDoorWordSync.js';
+import * as PortraitPuzzle from './alchemist_lab/PortraitPuzzle.js';
+import * as DrawerPuzzle from './alchemist_lab/DrawerPuzzle.js';
 
 // --- Wizard Modules ---
 import * as TicTacToe from './wizard_library/TicTacToe.js';
@@ -38,6 +40,8 @@ export function initAll() {
     // Alchemy South
     alchPortraitBooks: AlchPortraitBooks.init(),
     alchFlaskTransfer: AlchFlaskTransfer.init(),
+    alchPortrait: PortraitPuzzle.init(),
+    
     // Alchemy West
     alchMortarEssence: AlchMortarEssence.init(),
     alchKeyTransmutation: AlchKeyTransmutation.init(),
@@ -45,6 +49,7 @@ export function initAll() {
     // Alchemy North
     alchNorthHierarchyNote: AlchNorthHierarchyNote.init(),
     alchStatuePose: AlchStatuePose.init(),
+    alch_drawer_puzzle: DrawerPuzzle.init(),
     // Alchemy East
     alchEastSlidingLock: AlchEastSlidingLock.init(),
     alchEastDoorSync: AlchEastDoorSync.init(),
@@ -73,13 +78,16 @@ export function initAll() {
       // Alchemy
       alchPortraitBooks: AlchPortraitBooks.exportPublic(internal.alchPortraitBooks),
       alchFlaskTransfer: AlchFlaskTransfer.exportPublic(internal.alchFlaskTransfer),
+      alchPortrait: PortraitPuzzle.exportPublic(internal.alchPortrait),
       // Alchemy West
       alchMortarEssence: AlchMortarEssence.exportPublic(internal.alchMortarEssence),
+      'alch:mortar': AlchMortarEssence.exportPublic(internal.alchMortarEssence),
       alchKeyTransmutation: AlchKeyTransmutation.exportPublic(internal.alchKeyTransmutation),
       alchWestCodeboxJigsaw: AlchWestCodeboxJigsaw.exportPublic(internal.alchWestCodeboxJigsaw),
       // Alchemy North
       alchNorthHierarchyNote: AlchNorthHierarchyNote.exportPublic(internal.alchNorthHierarchyNote),
       alchStatuePose: AlchStatuePose.exportPublic(internal.alchStatuePose),
+      alch_drawer_puzzle: DrawerPuzzle.exportPublic(internal.alch_drawer_puzzle),
       // Alchemy East
       alchEastSlidingLock: AlchEastSlidingLock.exportPublic(internal.alchEastSlidingLock),
       alchEastDoorSync: AlchEastDoorSync.exportPublic(internal.alchEastDoorSync),
@@ -114,6 +122,7 @@ const DIRECT_OBJECT_ALIASES = Object.freeze({
   door_seal: ['puzzle_door_seal', 'door_seal'],
 
   // Alchemist
+  alchPortrait: ['puzzle_portrait_books', 'alch:portrait'],
   'alch:mortar': ['puzzle_mortar', 'alch:mortar'],
   'alch:transmuter': ['puzzle_transmuter', 'alch:transmuter'],
   'alch:ritual-paper': ['puzzle_transmuter', 'alch:ritual-paper'],
@@ -122,6 +131,7 @@ const DIRECT_OBJECT_ALIASES = Object.freeze({
   'alch:portrait-books': ['puzzle_portrait_books', 'alch:portrait-books'],
   'alch:portrait': ['puzzle_portrait_books', 'alch:portrait'],
   'alch:portrait-lady': ['puzzle_portrait_books', 'alch:portrait-lady'],
+  'alch:drawer': ['puzzle_drawer', 'alch:drawer'],
   'alch:flask-transfer': ['puzzle_flask_transfer', 'alch:flask-transfer'],
   'alch:flasks': ['puzzle_flask_transfer', 'alch:flasks'],
   'alch:flask-shelf': ['puzzle_flask_transfer', 'alch:flask-shelf'],
@@ -189,9 +199,19 @@ export function apply(state, action) {
 
   const normalizedAction = normalizeIncomingAction(action);
   const objectId = String(normalizedAction?.objectId || '');
+  const verb = String(normalizedAction?.verb || '').trim().toUpperCase();
 
   if (!objectId) {
     return makeResult({ state, ok: false, error: 'MISSING_OBJECT_ID' });
+  }
+
+  if (verb === 'CLOSE' && objectId.startsWith('puzzle_')) {
+    return makeResult({
+      state,
+      ok: true,
+      error: null,
+      diff: { activeWidget: null },
+    });
   }
 
   // 1) Widget-Triggers
@@ -213,15 +233,9 @@ export function apply(state, action) {
 
 function routeWidgetTriggers(state, action) {
   const triggerId = String(action?.objectId || '');
+  const triggerVerb = String(action?.verb || '').trim().toUpperCase();
   const tictactoeSolved = !!state?.public?.tictactoe_scroll?.solved;
-
-  if (triggerId === 'trigger_tictactoe_scroll' && tictactoeSolved) {
-    return makeResult({ state, ok: false, error: 'SCROLL_ALREADY_SOLVED' });
-  }
-
-  if (triggerId === 'trigger_door_seal' && !tictactoeSolved) {
-    return makeResult({ state, ok: false, error: 'DOOR_LOCKED_UNTIL_SCROLL_SOLVED' });
-  }
+  const alchSlidingSolved = !!state?.public?.alchEastSlidingLock?.solved;
 
   const widgetMap = {
     // --- WIZARD ---
@@ -237,39 +251,32 @@ function routeWidgetTriggers(state, action) {
     trigger_key_vase: "vase_puzzle",
 
     // --- ALCHEMIST ---
-    trigger_mortar: 'mortar_puzzle',
-    trigger_alch_mortar: 'mortar_puzzle',
-
+    trigger_drawer: 'alch_drawer_puzzle',
+    trigger_mortar: 'alch:mortar',
+    trigger_alch_mortar: 'alch:mortar',
     trigger_transmuter: 'transmuter_puzzle',
     trigger_alch_transmuter: 'transmuter_puzzle',
-
     trigger_portrait_books: 'portrait_books_puzzle',
     trigger_alch_portrait_books: 'portrait_books_puzzle',
     trigger_portrait: 'portrait_books_puzzle',
-
     trigger_flask_transfer: 'flask_transfer_puzzle',
     trigger_alch_flask_transfer: 'flask_transfer_puzzle',
     trigger_flasks: 'flask_transfer_puzzle',
-
     trigger_west_codebox: 'west_codebox_puzzle',
     trigger_alch_west_codebox: 'west_codebox_puzzle',
     trigger_west_jigsaw: 'west_codebox_puzzle',
-
     trigger_north_hierarchy_note: 'north_hierarchy_note_puzzle',
     trigger_alch_north_hierarchy_note: 'north_hierarchy_note_puzzle',
     trigger_hierarchy_note: 'north_hierarchy_note_puzzle',
-
     trigger_statue_pose: 'statue_pose_puzzle',
     trigger_alch_statue_pose: 'statue_pose_puzzle',
     trigger_statue: 'statue_pose_puzzle',
-
     trigger_east_sliding_lock: 'east_sliding_lock_puzzle',
     trigger_alch_east_sliding_lock: 'east_sliding_lock_puzzle',
-
-    trigger_east_door_sync: 'east_door_sync_puzzle',
-    trigger_alch_east_door_sync: 'east_door_sync_puzzle',
-    trigger_east_door: 'east_door_sync_puzzle',
-
+    trigger_east_door_sync: 'alch_east_door',
+    trigger_alch_east_door_sync: 'alch_east_door',
+    trigger_east_door: 'alch_east_door',
+    trigger_alch_east_door: 'alch_east_door',
     trigger_light_beam_grid: 'light_beam_grid_puzzle',
     trigger_alch_light_beam_grid: 'light_beam_grid_puzzle',
     trigger_mirror_grid: 'light_beam_grid_puzzle',
@@ -280,9 +287,42 @@ function routeWidgetTriggers(state, action) {
     trigger_final_plates: 'final_sync_plates',
     trigger_final_door: 'final_door_panel',
   };
-
   const widget = widgetMap[triggerId];
   if (!widget) return null;
+
+  if (triggerVerb === 'CLOSE') {
+    return makeResult({
+      state,
+      ok: true,
+      error: null,
+      diff: { activeWidget: null },
+    });
+  }
+
+  if (triggerId === 'trigger_tictactoe_scroll' && tictactoeSolved) {
+    return makeResult({ state, ok: false, error: 'SCROLL_ALREADY_SOLVED' });
+  }
+
+  if (triggerId === 'trigger_door_seal' && !tictactoeSolved) {
+    return makeResult({ state, ok: false, error: 'DOOR_LOCKED_UNTIL_SCROLL_SOLVED' });
+  }
+
+  if (
+    (triggerId === 'trigger_east_sliding_lock' || triggerId === 'trigger_alch_east_sliding_lock') &&
+    alchSlidingSolved
+  ) {
+    return makeResult({ state, ok: false, error: 'EAST_SLIDING_LOCK_ALREADY_SOLVED' });
+  }
+
+  if (
+    (triggerId === 'trigger_east_door' ||
+      triggerId === 'trigger_alch_east_door' ||
+      triggerId === 'trigger_east_door_sync' ||
+      triggerId === 'trigger_alch_east_door_sync') &&
+    !alchSlidingSolved
+  ) {
+    return makeResult({ state, ok: false, error: 'ALCH_DOOR_LOCK_HIDDEN_UNTIL_SLIDING_SOLVED' });
+  }
 
   return makeResult({
     state,
@@ -294,6 +334,7 @@ function routeWidgetTriggers(state, action) {
 
 function routePuzzleLogic(state, action, now) {
   const oid = String(action?.objectId || '');
+  const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
 
   const puzzleMap = {
     // Legacy
@@ -322,14 +363,20 @@ function routePuzzleLogic(state, action, now) {
     puzzle_east_sliding_lock:    ['alchEastSlidingLock', AlchEastSlidingLock],
     puzzle_east_door_sync:       ['alchEastDoorSync', AlchEastDoorSync],
     puzzle_final_corridor:       ['finalCorridor', FinalDoorWordSync],
+    puzzle_drawer:               ['alch_drawer_puzzle', DrawerPuzzle],
   };
 
   const hit = puzzleMap[oid];
   if (!hit) return null;
 
+  // Portrait widget actions (open/take) are handled by PortraitPuzzle.
+  if (oid === 'puzzle_portrait_books' && canonicalObjectId === 'alch:portrait') {
+    const portraitAction = { ...action, objectId: canonicalObjectId };
+    return runPuzzle(state, 'alchPortrait', PortraitPuzzle, portraitAction, now);
+  }
+
   const [key, moduleRef] = hit;
-  
-  const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
+
   let puzzleAction = canonicalObjectId
     ? { ...action, objectId: canonicalObjectId }
     : action;
@@ -384,6 +431,9 @@ function runPuzzle(state, key, moduleRef, action, now) {
   const next = cloneState(state);
   next.internal[key] = nextLocalState;
   next.public[key] = moduleRef.exportPublic(nextLocalState);
+  if (key === 'alchMortarEssence') {
+    next.public['alch:mortar'] = next.public[key];
+  }
 
   const diff =
     res.diff && Object.keys(res.diff).length > 0

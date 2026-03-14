@@ -35,6 +35,10 @@ function prerequisites(ctx, st) {
   };
 }
 
+function isSoloMode(ctx) {
+  return String(ctx?.public?.mode || '').trim().toLowerCase() === 'solo';
+}
+
 function purgeOldPresses(presses, nowMs, windowMs) {
   const minTs = nowMs - windowMs;
   for (const [pid, ts] of Object.entries(presses)) {
@@ -48,6 +52,8 @@ export function init() {
     opened: false,
     syncWindowMs: 1800,
     presses: {}, // { playerId: timestampMs }
+    soloArmed: false,
+    soloArmedAt: null,
     attempts: 0,
     lastOpenedAt: null
   };
@@ -58,7 +64,8 @@ export function exportPublic(state) {
     keyInserted: !!state.keyInserted,
     opened: !!state.opened,
     syncWindowMs: state.syncWindowMs,
-    armedPlayers: Object.keys(state.presses || {}).length,
+    armedPlayers: state.soloArmed ? 1 : Object.keys(state.presses || {}).length,
+    soloArmed: !!state.soloArmed,
     attempts: state.attempts,
     lastOpenedAt: state.lastOpenedAt
   };
@@ -90,7 +97,10 @@ export function apply(state, action, now, ctx = {}) {
         next.keyInserted = true;
       }
 
-      return ok(next, { keyInserted: next.keyInserted });
+      return ok(next, {
+        keyInserted: next.keyInserted,
+        activeWidget: null,
+      });
     }
 
     case 'press': {
@@ -105,6 +115,26 @@ export function apply(state, action, now, ctx = {}) {
       if (!playerId) return fail(state, 'MISSING_PLAYER_ID');
 
       next.attempts += 1;
+      if (isSoloMode(ctx)) {
+        if (!next.soloArmed) {
+          next.soloArmed = true;
+          next.soloArmedAt = nowMs;
+          next.presses[playerId] = nowMs;
+        } else {
+          next.opened = true;
+          next.lastOpenedAt = nowMs;
+          next.soloArmed = false;
+          next.soloArmedAt = nowMs;
+          next.presses = {};
+        }
+        return ok(next, {
+          opened: next.opened,
+          armedPlayers: next.soloArmed ? 1 : 0,
+          soloArmed: next.soloArmed,
+          attempts: next.attempts
+        });
+      }
+
       next.presses[playerId] = nowMs;
       purgeOldPresses(next.presses, nowMs, next.syncWindowMs);
 
@@ -123,6 +153,7 @@ export function apply(state, action, now, ctx = {}) {
       return ok(next, {
         opened: next.opened,
         armedPlayers: Object.keys(next.presses).length,
+        soloArmed: next.soloArmed,
         attempts: next.attempts
       });
     }

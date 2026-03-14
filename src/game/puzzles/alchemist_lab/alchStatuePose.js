@@ -10,13 +10,14 @@ const VALID_OBJECTS = new Set([
 
 const TARGET_POSE = Object.freeze({
   leftArm: 'HALF_UP',   // linker Arm halb oben
-  rightArm: 'ON_CHEST', // rechte Hand auf Brust
+  rightArm: 'FULL_UP',  // rechter Arm ganz oben
   head: 'UP',           // Kopf nach oben
 });
 
 export function init() {
   return {
     featherInserted: false,
+    featherPosition: null,
     pose: {
       leftArm: 'DOWN',
       rightArm: 'DOWN',
@@ -37,6 +38,7 @@ export function exportPublic(state) {
   return {
     solved: !!state.solved,
     featherInserted: !!state.featherInserted,
+    featherPosition: state.featherPosition,
     mouthOpened: !!state.mouthOpened,
     pose: { ...state.pose },
     output: {
@@ -81,6 +83,7 @@ export function apply(state, action) {
       const item = normalizeItem(action?.data?.item);
       if (item !== 'FEATHER') return fail(state, 'INVALID_ITEM');
       next.featherInserted = true;
+      next.featherPosition = action?.data?.ear || 'RIGHT';
       maybeUnlock(next);
       console.log("[STATUE] after insert", {
         item,
@@ -90,6 +93,13 @@ export function apply(state, action) {
         mouthOpened: next.mouthOpened,
         solved: next.solved,
       });
+      return ok(next);
+    }
+
+    case 'toggle_feather': {
+      if (!next.featherInserted) return fail(state, 'NO_FEATHER_TO_TOGGLE');
+      next.featherPosition = next.featherPosition === 'RIGHT' ? 'LEFT' : 'RIGHT';
+      maybeUnlock(next);
       return ok(next);
     }
 
@@ -172,7 +182,7 @@ function maybeUnlock(s) {
   const poseMatched = posesEqual(s.pose, s.targetPose);
   s.output.poseMatched = poseMatched;
 
-  if (s.featherInserted && poseMatched) {
+  if (s.featherInserted && s.featherPosition === 'LEFT' && poseMatched) {
     s.mouthOpened = true;
     s.solved = true;
     s.output.flammaReady = true;
@@ -214,8 +224,8 @@ function normalizeLeftArm(v) {
 function normalizeRightArm(v) {
   const raw = String(v ?? '').trim().toUpperCase();
   if (['DOWN', 'UNTEN'].includes(raw)) return 'DOWN';
-  if (['ON_CHEST', 'CHEST', 'BRUST', 'AUF_BRUST'].includes(raw)) return 'ON_CHEST';
-  if (['UP', 'OBEN'].includes(raw)) return 'UP';
+  if (['HALF_UP', 'HALFUP', 'HALB_OBEN', 'HALBOBEN'].includes(raw)) return 'HALF_UP';
+  if (['FULL_UP', 'FULLUP', 'GANZ_OBEN', 'GANZOBEN', 'UP', 'OBEN', 'ON_CHEST', 'CHEST', 'BRUST', 'AUF_BRUST'].includes(raw)) return 'FULL_UP';
   return null;
 }
 
@@ -264,6 +274,7 @@ function fail(state, errorCode) {
 function clone(s) {
   return {
     featherInserted: !!s.featherInserted,
+    featherPosition: s.featherPosition,
     pose: { ...(s.pose || {}) },
     targetPose: { ...(s.targetPose || TARGET_POSE) },
     mouthOpened: !!s.mouthOpened,

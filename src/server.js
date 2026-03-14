@@ -145,8 +145,8 @@ io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
   // Raum anlegen
-  onSafe(socket, 'create_room', schemas.CreateRoom, async ({ roomName }, cb) => {
-    const room = rooms.createRoom(roomName);
+  onSafe(socket, 'create_room', schemas.CreateRoom, async ({ roomName, mode, startingChamber }, cb) => {
+    const room = rooms.createRoom(roomName, { mode, startingChamber });
     cb?.({ ok: true, roomId: room.id });
   });
 
@@ -203,6 +203,16 @@ io.on('connection', (socket) => {
     });
 
     cb?.({ ok: true, seq: result.seq });
+  });
+
+  onSafe(socket, 'intent:switch_room', schemas.SwitchRoom, async ({ roomId, chamber }, cb) => {
+    const result = rooms.switchChamber(roomId, chamber);
+    if (!result.ok) return cb?.(result);
+    io.to(roomId).emit('state:roomChanged', {
+      seq: result.seq,
+      diff: result.diff,
+    });
+    cb?.({ ok: true, seq: result.seq, diff: result.diff });
   });
 
   // Chat-Nachricht (einfaches Beispiel)
