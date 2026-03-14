@@ -197,6 +197,11 @@ export function apply(state, action) {
     state = initAll();
   }
 
+  const verb = String(action?.verb || '').trim().toUpperCase();
+  if (verb === 'CLOSE') {
+    return makeResult({ state, ok: true, error: null, diff: { activeWidget: null } });
+  }
+
   const normalizedAction = normalizeIncomingAction(action);
   const objectId = String(normalizedAction?.objectId || '');
 
@@ -412,6 +417,10 @@ function runPuzzle(state, key, moduleRef, action, now) {
     res.diff && Object.keys(res.diff).length > 0
       ? res.diff
       : { [key]: next.public[key] };
+
+  if (!Object.prototype.hasOwnProperty.call(diff, key)) {
+    diff[key] = next.public[key];
+  }
 
   if (key === 'alchStatuePose') {
     console.log("[DISPATCH:STATUE] exported", {

@@ -590,7 +590,11 @@ export class RoomManager {
     room.state = res.nextState;
     ensureInventory(room, action?.playerId || null);
 
-    if (normalizeGameMode(room.state.public?.mode) === 'coop' && res?.diff?.activeWidget) {
+    if (
+      normalizeGameMode(room.state.public?.mode) === 'coop' &&
+      res?.diff &&
+      Object.prototype.hasOwnProperty.call(res.diff, 'activeWidget')
+    ) {
       if (!room.state.internal.activeWidgetByPlayer) {
         room.state.internal.activeWidgetByPlayer = new Map();
       }
@@ -605,6 +609,7 @@ export class RoomManager {
 
     // A. Wizard Door
     const wizDoorDiff = this._checkWizardDoorTriggers(room);
+    const wizDoorOpenedAtChanged = this._updateWizardDoorOpenedAt(room, prevPublic);
     // B. Alchemist Door
     const alchDoorChanged = this._updateAlchemistDoorState(room, normalizedAction);
     const corridorChanged = this._updateCorridorAccess(room);
@@ -622,6 +627,9 @@ export class RoomManager {
     // Merge Diffs
     const diff = { ...(res.diff ?? {}), ...wizDoorDiff };
     if (invChanged) diff.inventory = room.state.public.inventory;
+    if (wizDoorOpenedAtChanged) {
+        diff.door_seal = room.state.public.door_seal;
+    }
     if (alchDoorChanged) {
         diff.alchDoorState = room.state.public.alchDoorState;
         diff.doorState = room.state.public.doorState;
@@ -667,6 +675,19 @@ export class RoomManager {
       }
     }
     return diff;
+  }
+
+  _updateWizardDoorOpenedAt(room, prevPublic) {
+    const nextDoor = room?.state?.public?.door_seal;
+    if (!nextDoor) return false;
+    const prevOpened = !!prevPublic?.door_seal?.opened;
+    const nextOpened = !!nextDoor.opened;
+    if (!nextOpened) return false;
+    if (!nextDoor.openedAt || !prevOpened) {
+      nextDoor.openedAt = nextDoor.openedAt || Date.now();
+      return true;
+    }
+    return false;
   }
 
   // --- ALCHEMIST'S DOOR LOGIC  ---
@@ -780,8 +801,8 @@ export class RoomManager {
     if (pub.mode === 'solo') {
       unlocked = bothReady;
     } else {
-      const wizardAt = Number(pub?.door_seal?.openableAt || 0);
-      const alchAt = Number(pub?.alchDoorState?.updatedAt || 0);
+      const wizardAt = Number(pub?.door_seal?.openedAt || 0);
+      const alchAt = Number(pub?.alchEastDoorSync?.lastOpenedAt || 0);
       unlocked = bothReady && wizardAt > 0 && alchAt > 0 && Math.abs(wizardAt - alchAt) <= DOOR_SYNC_WINDOW_MS;
     }
 
@@ -1030,13 +1051,7 @@ function defaultCompletionPredicate(state) {
 
 function corridorWizardReady(pub) {
   const doorSeal = pub?.door_seal || {};
-  const scrollSolved = !!(pub?.scroll_grid?.solved || pub?.tictactoe_scroll?.solved);
-  return !!(
-    doorSeal.openable ||
-    doorSeal.opened ||
-    doorSeal.solved ||
-    (doorSeal.hasKey && scrollSolved)
-  );
+  return !!(doorSeal.opened || doorSeal.solved);
 }
 
 function corridorAlchemistReady(pub) {
