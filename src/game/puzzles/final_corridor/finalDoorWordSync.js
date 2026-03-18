@@ -1,7 +1,7 @@
 import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'finalCorridor';
-const DEFAULT_KEYWORD = 'winner';
+const DEFAULT_KEYWORD = 'enigma';
 const DEFAULT_SYNC_WINDOW_MS = 1800;
 
 const WIZARD_RUNES = Object.freeze(['ANSUZ', 'ISA', 'NAUTHIZ']);

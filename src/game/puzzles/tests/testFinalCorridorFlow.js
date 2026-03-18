@@ -87,7 +87,7 @@ test('Final corridor flow: runes -> keyword -> sync plates -> win', async () => 
   assert.equal(!!live.state.public?.finalCorridor?.hintRevealed, true);
   assert.equal(typeof live.state.public?.finalCorridor?.runeHint?.ANSUZ, 'string');
 
-  r = rm.applyAction(roomId, mkAction('sockA', 'final:door-keypad', 'submit', { word: 'winner' }));
+  r = rm.applyAction(roomId, mkAction('sockA', 'final:door-keypad', 'submit', { word: 'enigma' }));
   assert.equal(r.ok, true, r.error);
   assert.equal(!!live.state.public?.finalCorridor?.keywordSolved, true);
 

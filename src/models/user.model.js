@@ -10,11 +10,13 @@ export async function createUser(username, email, passwordHash, emailVerificatio
 }
 
 export async function findUserByEmail(email) {
-  const result = await db.query(`SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL`, [email]);
+  const result = await db.query(
+    `SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL`,
+    [email]
+  );
   return result.rows[0];
 }
 
-// for email verification
 export async function findUserByToken(hashedToken) {
   const result = await db.query(
     `SELECT * FROM users WHERE email_verification_token = $1 AND email_verification_expires > NOW() AND email_verified = FALSE`,
@@ -33,6 +35,14 @@ export async function completeEmailVerification(userId) {
 export async function findUserById(userID) {
   const user = await db.query(
     `SELECT * FROM users WHERE id = $1`,
+    [userID]
+  );
+  return user.rows[0];
+}
+
+export async function findActiveUserById(userID) {
+  const user = await db.query(
+    `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
     [userID]
   );
   return user.rows[0];
@@ -61,8 +71,8 @@ export async function softDeleteUserById(userID) {
 
 export async function findDeletedUserByEmail(email) {
   const result = await db.query(
-    `SELECT * FROM users WHERE email = $1 AND deleted_at IS NOT NULL`,
-  [email]
+    `SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NOT NULL`,
+    [email]
   );
   return result.rows[0];
 }
