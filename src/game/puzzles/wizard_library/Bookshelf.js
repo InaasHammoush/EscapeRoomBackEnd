@@ -2,7 +2,7 @@
 import { makeResult } from '../fsm.js';
 
 const PUZZLE_KEY = 'bookshelf_puzzle';
-const SOLUTION = ["BOOK_YELLOW", "BOOK_RED", "BOOK_BLUE", "BOOK_GREEN"];
+const SOLUTION = ["BOOK_GREEN", "BOOK_BLUE", "BOOK_RED", "BOOK_YELLOW"];
 
 export function init() {
   return {

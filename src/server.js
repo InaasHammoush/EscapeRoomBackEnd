@@ -64,6 +64,56 @@ app.use((err, _req, res, next) => {
   return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR' });
 });
 
+// ------------------------------------------------------------
+// 2.1) Lobby-State (Coop Rollen A/B)
+// ------------------------------------------------------------
+const lobbies = new Map(); // sessionId -> { players: Map<socketId,{role:string|null}>, roomId?:string }
+
+function normalizeRole(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if (raw === 'A' || raw === 'B') return raw;
+  if (raw === 'WIZARD' || raw === 'WIZARD_LIBRARY') return 'A';
+  if (raw === 'ALCHEMIST' || raw === 'ALCHEMIST_LAB') return 'B';
+  return null;
+}
+
+function getLobby(sessionId) {
+  if (!sessionId) return null;
+  if (!lobbies.has(sessionId)) {
+    lobbies.set(sessionId, { players: new Map() });
+  }
+  return lobbies.get(sessionId);
+}
+
+function lobbySnapshot(sessionId, socketId = null) {
+  const lobby = lobbies.get(sessionId);
+  if (!lobby) return { players: [], ready: false, roomId: null };
+  const players = [...lobby.players.entries()].map(([id, p]) => ({
+    id,
+    role: p.role || null,
+  }));
+  const roles = players.map((p) => p.role).filter(Boolean);
+  const ready = roles.includes('A') && roles.includes('B');
+  const myRole = socketId ? (lobby.players.get(socketId)?.role || null) : null;
+  return { players, ready, ...(socketId ? { myRole } : {}), roomId: lobby.roomId || null };
+}
+
+function lobbyRoom(sessionId) {
+  return `lobby:${sessionId}`;
+}
+
+function ensureLobbyRoom(sessionId) {
+  const lobby = getLobby(sessionId);
+  if (!lobby) return null;
+  const snap = lobbySnapshot(sessionId);
+  if (snap.ready && !lobby.roomId) {
+    const room = rooms.createRoom('wizard_library', { mode: 'coop' });
+    lobby.roomId = room.id;
+  }
+  return lobby.roomId || null;
+}
+
+
 const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
@@ -145,56 +195,115 @@ io.on('connection', (socket) => {
     console.log('Socket.IO connection accepted', socket.id);
   }
 
-  onSafe(
-    socket,
-    'create_room',
-    schemas.CreateRoom,
-    async ({ roomName, mode, startingChamber }, cb) => {
-      const room = rooms.createRoom(roomName, { mode, startingChamber });
-      cb?.({ ok: true, roomId: room.id });
+  socket.data.lobbies = new Set();
+
+  // Raum anlegen
+  onSafe(socket, 'create_room', schemas.CreateRoom, async ({ roomName, mode, startingChamber }, cb) => {
+    const room = rooms.createRoom(roomName, { mode, startingChamber });
+    cb?.({ ok: true, roomId: room.id });
     },
     { rateLimit: { windowMs: 60_000, max: 6 } }
   );
 
-  onSafe(
-    socket,
-    'join_room',
-    schemas.JoinRoom,
-    async ({ roomId, name }, cb) => {
-      try {
-        const user = socket.data.user;
-        const displayName = user?.username || name;
-        const profileId = user?.id || null;
+  // Raum beitreten
+  onSafe(socket, 
+    'join_room', 
+    schemas.JoinRoom, 
+    async ({ roomId, name, role }, cb) => {
+    try {
+      const user = socket.data.user;
+      const displayName = user?.username || name;   // JWT-Name schlägt manuelles Feld
+      const profileId = user?.id || null;           // Für Stats/room_participants
+      const normalizedRole = normalizeRole(role) || socket.data?.coopRole || null;
 
-        const room = await rooms.joinRoom(roomId, socket.id, displayName, profileId);
+      // joinRoom ist async, weil es ggf. einen Snapshot aus Redis lädt
+      const room = await rooms.joinRoom(roomId, socket.id, displayName, profileId, normalizedRole);
 
         socket.join(room.id);
 
         const publicRoom = rooms.publicRoom(room.id);
         io.to(room.id).emit('lobby_update', publicRoom);
 
-        const snapshot = rooms.snapshot(room.id);
-        cb?.({ ok: true, snapshot });
-      } catch (e) {
-        console.error('join_room failed:', e);
-        cb?.({ ok: false, error: e.message || 'ROOM_JOIN_FAILED' });
+      // Auto-start when expected players have joined
+      const mode = publicRoom?.state?.mode || room?.state?.public?.mode || 'coop';
+      const expectedPlayers = mode === 'solo' ? 1 : 2;
+      if (!room.started && room.players.size >= expectedPlayers) {
+        rooms.start(room.id);
+        for (const [sid] of room.players) {
+          const startedSnapshot = rooms.snapshotFor(room.id, sid);
+          if (!startedSnapshot) continue;
+          io.to(sid).emit('room_state', startedSnapshot);
+          io.to(sid).emit('state:snapshot', { snapshot: startedSnapshot });
+        }
       }
-    },
+
+      // eigenen Snapshot an den neuen Client zurückgeben
+      const snapshot = rooms.snapshotFor(room.id, socket.id);
+      console.log("✅ SNAPSHOT DATA SENT:", snapshot.state.views);
+      io.to(socket.id).emit('state:snapshot', { snapshot });
+      cb?.({ ok: true, snapshot });
+    } catch (e) {
+      console.error('join_room failed:', e);
+      cb?.({ ok: false, error: e.message || 'ROOM_JOIN_FAILED' });
+    }
+  },
     { rateLimit: { windowMs: 60_000, max: 20 } }
   );
 
+  // ----------------------------------------------------------
+  // Lobby (Coop Rollen A/B)
+  // ----------------------------------------------------------
+  socket.on('lobby:subscribe', ({ sessionId } = {}) => {
+    if (!sessionId) return;
+    const lobby = getLobby(sessionId);
+    lobby.players.set(socket.id, lobby.players.get(socket.id) || { role: null });
+    socket.join(lobbyRoom(sessionId));
+    socket.data.lobbies.add(sessionId);
+    ensureLobbyRoom(sessionId);
+    socket.emit('lobby:status', lobbySnapshot(sessionId, socket.id));
+    io.to(lobbyRoom(sessionId)).emit('lobby:status', lobbySnapshot(sessionId));
+  });
+
+  socket.on('lobby:status:get', ({ sessionId } = {}) => {
+    if (!sessionId) return;
+    ensureLobbyRoom(sessionId);
+    socket.emit('lobby:status', lobbySnapshot(sessionId, socket.id));
+  });
+
+  socket.on('lobby:setRole', ({ sessionId, role } = {}) => {
+    if (!sessionId) return;
+    const nextRole = normalizeRole(role);
+    if (!nextRole) return;
+    const lobby = getLobby(sessionId);
+    lobby.players.set(socket.id, { role: nextRole });
+    socket.join(lobbyRoom(sessionId));
+    socket.data.lobbies.add(sessionId);
+    socket.data.coopRole = nextRole;
+    ensureLobbyRoom(sessionId);
+    io.to(lobbyRoom(sessionId)).emit('lobby:status', lobbySnapshot(sessionId));
+    socket.emit('lobby:status', lobbySnapshot(sessionId, socket.id));
+  });
+
+  socket.on('lobby:unsubscribe', ({ sessionId } = {}) => {
+    if (!sessionId) return;
+    const lobby = lobbies.get(sessionId);
+    if (!lobby) return;
+    lobby.players.delete(socket.id);
+    socket.leave(lobbyRoom(sessionId));
+    socket.data.lobbies.delete(sessionId);
+    io.to(lobbyRoom(sessionId)).emit('lobby:status', lobbySnapshot(sessionId));
+    if (lobby.players.size === 0) lobbies.delete(sessionId);
+  });
+
+  // „Bereit“-Signal – Startet das Spiel, wenn alle bereit sind
   onSafe(
-    socket,
-    'ready',
-    schemas.Ready,
+    socket, 
+    'ready', 
+    schemas.Ready, 
     async ({ roomId }, cb) => {
       try {
         rooms.setReady(roomId, socket.id, true);
         io.to(roomId).emit('lobby_update', rooms.publicRoom(roomId));
-        if (rooms.allReady(roomId) && !rooms.get(roomId).started) {
-          rooms.start(roomId);
-          io.to(roomId).emit('room_state', rooms.snapshot(roomId));
-        }
         cb?.({ ok: true });
       } catch (e) {
         cb?.({ ok: false, error: e.message || 'READY_FAILED' });
@@ -204,24 +313,58 @@ io.on('connection', (socket) => {
   );
 
   onSafe(
-    socket,
-    'intent:turn',
-    schemas.Turn,
-    async (payload, cb) => {
-      const { roomId, direction } = payload;
-      const result = rooms.applyViewRotation(roomId, { direction });
+    socket, 
+    'intent:turn', 
+    schemas.Turn, 
+    async ( payload, cb) => {
+      const { roomId, direction } = payload; // Destructure the full validated payload
+      const result = rooms.applyViewRotation(roomId, { direction, socketId: socket.id }); // Pass direction inside an object
       if (!result.ok) return cb?.(result);
-
-      io.to(roomId).emit('state:viewChanged', {
+      const room = rooms.get(roomId);
+      const mode = room?.state?.public?.mode || 'coop';
+      const target = mode === 'coop' ? socket.id : roomId;
+      // Broadcast delta (per-player in coop)
+      io.to(target).emit('state:viewChanged', {
         seq: result.seq,
         viewIndex: result.diff.viewIndex
       });
-
-      cb?.({ ok: true, seq: result.seq });
     },
     { rateLimit: { windowMs: 10_000, max: 40 } }
   );
 
+
+  // Interaktion mit einem Objekt/Hotspot (Puzzle-Engine)
+  onSafe(
+    socket, 
+    'interact', 
+    schemas.Interact, 
+    async (payload, cb) => {
+      console.log("INTERACT payload received:", payload);
+      const { roomId, actionId, objectId, canonicalObjectId, verb, data } = payload;
+      const result = rooms.applyAction(roomId, {
+        actionId,
+        playerId: socket.id,
+        objectId,
+        canonicalObjectId,
+        verb,
+        data
+      });
+      if (!result.ok) return cb?.(result);
+      const room = rooms.get(roomId);
+      if (room?.state?.public?.mode === 'coop') {
+        for (const [sid] of room.players) {
+          const snap = rooms.snapshotFor(roomId, sid);
+          if (!snap) continue;
+          io.to(sid).emit('state:snapshot', { snapshot: snap });
+        }
+      } else {
+        // Delta an alle Clients im Raum senden
+        io.to(roomId).emit('puzzle_update', { seq: result.seq, diff: result.diff });
+      }
+      cb?.({ ok: true, seq: result.seq });
+    },
+    { rateLimit: { windowMs: 10_000, max: 80 } }
+  );
   onSafe(
     socket,
     'intent:switch_room',
@@ -250,29 +393,17 @@ io.on('connection', (socket) => {
     { rateLimit: { windowMs: 60_000, max: 20 } }
   );
 
-  onSafe(
-    socket,
-    'interact',
-    schemas.Interact,
-    async (payload, cb) => {
-      const { roomId, actionId, objectId, canonicalObjectId, verb, data } = payload;
-      const result = rooms.applyAction(roomId, {
-        actionId,
-        playerId: socket.id,
-        objectId,
-        canonicalObjectId,
-        verb,
-        data
-      });
-      if (!result.ok) return cb?.(result);
-
-      io.to(roomId).emit('puzzle_update', { seq: result.seq, diff: result.diff });
-      cb?.({ ok: true, seq: result.seq });
-    },
-    { rateLimit: { windowMs: 10_000, max: 80 } }
-  );
-
   socket.on('disconnect', () => {
+    if (socket.data?.lobbies) {
+      for (const sessionId of socket.data.lobbies) {
+        const lobby = lobbies.get(sessionId);
+        if (!lobby) continue;
+        lobby.players.delete(socket.id);
+        io.to(lobbyRoom(sessionId)).emit('lobby:status', lobbySnapshot(sessionId));
+        if (lobby.players.size === 0) lobbies.delete(sessionId);
+      }
+      socket.data.lobbies.clear();
+    }
     const affectedRoomIds = rooms.leaveBySocket(socket.id);
     affectedRoomIds.forEach(roomId => {
       io.to(roomId).emit('lobby_update', rooms.publicRoom(roomId));

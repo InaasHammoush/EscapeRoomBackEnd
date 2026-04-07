@@ -97,7 +97,7 @@ export function initAll() {
       tictactoe_scroll: TicTacToe.exportPublic(internal.tictactoe_scroll),
       bookshelf_puzzle: Bookshelf.exportPublic(internal.bookshelf_puzzle),
       candle_puzzle: CandlePuzzle.exportPublic(internal.candle_puzzle),
-      transformation_table: transformationTable.exportPublic(internal.transformation_table),
+      transformation_table_puzzle: transformationTable.exportPublic(internal.transformation_table_puzzle),
       merlin_scale: MerlinScale.exportPublic(internal.merlin_scale),
       vase_puzzle: VasePuzzle.exportPublic(internal.vase_puzzle),
       recipe_hint: RecipeHint.exportPublic(internal.recipe_hint),
@@ -197,10 +197,13 @@ export function apply(state, action) {
     state = initAll();
   }
 
+  const verb = String(action?.verb || '').trim().toUpperCase();
+  if (verb === 'CLOSE') {
+    return makeResult({ state, ok: true, error: null, diff: { activeWidget: null } });
+  }
+
   const normalizedAction = normalizeIncomingAction(action);
   const objectId = String(normalizedAction?.objectId || '');
-  const verb = String(normalizedAction?.verb || '').trim().toUpperCase();
-
   if (!objectId) {
     return makeResult({ state, ok: false, error: 'MISSING_OBJECT_ID' });
   }
@@ -439,6 +442,10 @@ function runPuzzle(state, key, moduleRef, action, now) {
     res.diff && Object.keys(res.diff).length > 0
       ? res.diff
       : { [key]: next.public[key] };
+
+  if (!Object.prototype.hasOwnProperty.call(diff, key)) {
+    diff[key] = next.public[key];
+  }
 
   if (key === 'alchStatuePose') {
     console.log("[DISPATCH:STATUE] exported", {

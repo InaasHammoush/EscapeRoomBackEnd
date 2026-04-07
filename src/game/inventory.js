@@ -17,9 +17,28 @@ export const STARTER_INVENTORY = Object.freeze({
 // Inventory-Bridge Helpers
 // ----------------------------------------------------------
 
-export function ensureInventory(room) {
+export function ensureInventory(room, socketId = null) {
     if (!room.state.public) room.state.public = {};
     if (!room.state.internal) room.state.internal = {};
+
+    const mode = String(room?.state?.public?.mode ?? '').trim().toLowerCase() === 'solo' ? 'solo' : 'coop';
+
+    if (mode === 'coop') {
+        if (!room.state.internal.inventories) {
+            room.state.internal.inventories = new Map();
+        }
+        if (socketId) {
+            let bag = room.state.internal.inventories.get(socketId);
+            if (!bag) {
+                const fromPub = fromPublicInventory(room.state.public.inventory);
+                bag = Object.keys(fromPub).length > 0 ? fromPub : cloneBag(STARTER_INVENTORY);
+                room.state.internal.inventories.set(socketId, bag);
+            }
+            room.state.internal.inventory = bag;
+            room.state.public.inventory = toPublicInventory(bag);
+            return;
+        }
+    }
 
     if (!room.state.internal.inventory) {
         const fromPub = fromPublicInventory(room.state.public.inventory);
@@ -28,6 +47,16 @@ export function ensureInventory(room) {
     }
 
     room.state.public.inventory = toPublicInventory(room.state.internal.inventory);
+}
+
+export function getInventoryForPlayer(room, socketId = null) {
+    const mode = String(room?.state?.public?.mode ?? '').trim().toLowerCase() === 'solo' ? 'solo' : 'coop';
+    if (mode === 'coop' && socketId) {
+        ensureInventory(room, socketId);
+        return room.state.internal.inventories?.get(socketId) || room.state.internal.inventory;
+    }
+    ensureInventory(room);
+    return room.state.internal.inventory;
 }
 
 export function normalizeActionItems(action) {

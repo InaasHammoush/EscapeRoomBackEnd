@@ -11,6 +11,12 @@ export const roomImagesMapper = {
     2: '/rooms/alchemist_lab/south.png',
     3: '/rooms/alchemist_lab/west.png'
   },
+  corridor: {
+    0: '/rooms/corridor/north.png',
+    1: '/rooms/corridor/east.png',
+    2: '/rooms/corridor/south.png',
+    3: '/rooms/corridor/west.png'
+  },
   default: {
     0: '/rooms/default/north.png',
     1: '/rooms/default/east.png',

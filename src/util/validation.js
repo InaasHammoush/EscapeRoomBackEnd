@@ -43,6 +43,7 @@ export const schemas = {
   JoinRoom: z.object({
     roomId: z.uuid(),
     name: nonControlText({ min: 1, max: 32, label: 'Name' }),
+    role: z.string().min(1).max(32).optional(),
   }),
   Ready: z.object({
     roomId: z.uuid(),

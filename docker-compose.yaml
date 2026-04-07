@@ -75,7 +75,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "127.0.0.1:6379:6379"
+      - "6379:6379"        # Host-Port für lokalen Dev-Server
     networks:
       - webnet
 
@@ -95,7 +95,7 @@ services:
       timeout: 3s
       retries: 20
     ports:
-      - "127.0.0.1:5432:5432"
+      - "5432:5432"        # optional, für lokale DB-Tools
     networks:
       - webnet
 

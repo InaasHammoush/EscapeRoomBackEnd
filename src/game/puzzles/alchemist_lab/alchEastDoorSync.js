@@ -115,45 +115,16 @@ export function apply(state, action, now, ctx = {}) {
       if (!playerId) return fail(state, 'MISSING_PLAYER_ID');
 
       next.attempts += 1;
-      if (isSoloMode(ctx)) {
-        if (!next.soloArmed) {
-          next.soloArmed = true;
-          next.soloArmedAt = nowMs;
-          next.presses[playerId] = nowMs;
-        } else {
-          next.opened = true;
-          next.lastOpenedAt = nowMs;
-          next.soloArmed = false;
-          next.soloArmedAt = nowMs;
-          next.presses = {};
-        }
-        return ok(next, {
-          opened: next.opened,
-          armedPlayers: next.soloArmed ? 1 : 0,
-          soloArmed: next.soloArmed,
-          attempts: next.attempts
-        });
-      }
-
-      next.presses[playerId] = nowMs;
-      purgeOldPresses(next.presses, nowMs, next.syncWindowMs);
-
-      const times = Object.values(next.presses);
-      if (times.length >= 2) {
-        const min = Math.min(...times);
-        const max = Math.max(...times);
-
-        if ((max - min) <= next.syncWindowMs) {
-          next.opened = true;
-          next.lastOpenedAt = nowMs;
-          next.presses = {};
-        }
-      }
+      next.opened = true;
+      next.lastOpenedAt = nowMs;
+      next.presses = {};
+      next.soloArmed = false;
+      next.soloArmedAt = null;
 
       return ok(next, {
         opened: next.opened,
-        armedPlayers: Object.keys(next.presses).length,
-        soloArmed: next.soloArmed,
+        armedPlayers: 0,
+        soloArmed: false,
         attempts: next.attempts
       });
     }
