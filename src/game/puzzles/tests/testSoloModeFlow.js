@@ -119,7 +119,7 @@ test('Solo mode: final plates can be pressed sequentially by one player', async 
   assert.equal(r.ok, true, r.error);
   assert.equal(Number(live.state.public.finalCorridor?.runesLitTotal || 0), 6);
 
-  r = rm.applyAction(roomId, mkAction('sockSolo', 'final:door-keypad', 'submit', { word: 'winner' }));
+  r = rm.applyAction(roomId, mkAction('sockSolo', 'final:door-keypad', 'submit', { word: 'enigma' }));
   assert.equal(r.ok, true, r.error);
   assert.equal(!!live.state.public.finalCorridor?.keywordSolved, true);
 

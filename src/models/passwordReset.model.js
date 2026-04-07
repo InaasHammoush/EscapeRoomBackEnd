@@ -10,16 +10,23 @@ export async function createPasswordResetToken(userId, hashedToken, expiresAt) {
 }
 
 export async function findTokenHash(hashedToken) {
-    const result = await db.query(
+  const result = await db.query(
     `SELECT * FROM password_resets WHERE reset_token = $1 AND expires_at > NOW()`,
     [hashedToken]
-    );
-    return result;
+  );
+  return result;
 }
 
 export async function deleteTokenByHash(hashedToken) {
   await db.query(
     `DELETE FROM password_resets WHERE reset_token = $1`,
-    [hashedToken]   
-  )
+    [hashedToken]
+  );
+}
+
+export async function deleteTokensByUserId(userId) {
+  await db.query(
+    `DELETE FROM password_resets WHERE user_id = $1`,
+    [userId]
+  );
 }

@@ -22,6 +22,13 @@ function ok(nextState, diff = {}) {
   return { ok: true, error: null, nextState, diff };
 }
 
+function exportDiff(state, extra = {}) {
+  return {
+    alchEastSlidingLock: exportPublic(state),
+    ...extra,
+  };
+}
+
 function isSolved(board) {
   if (!Array.isArray(board) || board.length !== SOLVED_BOARD.length) return false;
   for (let i = 0; i < SOLVED_BOARD.length; i += 1) {
@@ -76,13 +83,13 @@ export function apply(state, action) {
   if (verb === 'interact' || verb === 'inspect' || verb === 'open') {
     return ok(next, {
       activeWidget: WIDGET_ID,
-      [WIDGET_ID]: exportPublic(next),
+      ...exportDiff(next),
     });
   }
 
   if (verb === 'reset') {
     const reset = init();
-    return ok(reset, { solved: reset.solved, board: reset.board, lockVisible: reset.lockVisible });
+    return ok(reset, exportDiff(reset));
   }
 
   if (!['move', 'slide', 'click'].includes(verb)) {
@@ -130,9 +137,6 @@ export function apply(state, action) {
   }
 
   return ok(next, {
-    board: [...next.board],
-    moves: next.moves,
-    solved: next.solved,
-    lockVisible: next.lockVisible
+    ...exportDiff(next),
   });
 }

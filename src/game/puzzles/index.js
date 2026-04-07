@@ -204,9 +204,17 @@ export function apply(state, action) {
 
   const normalizedAction = normalizeIncomingAction(action);
   const objectId = String(normalizedAction?.objectId || '');
-
   if (!objectId) {
     return makeResult({ state, ok: false, error: 'MISSING_OBJECT_ID' });
+  }
+
+  if (verb === 'CLOSE' && objectId.startsWith('puzzle_')) {
+    return makeResult({
+      state,
+      ok: true,
+      error: null,
+      diff: { activeWidget: null },
+    });
   }
 
   // 1) Widget-Triggers
@@ -228,15 +236,9 @@ export function apply(state, action) {
 
 function routeWidgetTriggers(state, action) {
   const triggerId = String(action?.objectId || '');
+  const triggerVerb = String(action?.verb || '').trim().toUpperCase();
   const tictactoeSolved = !!state?.public?.tictactoe_scroll?.solved;
-
-  if (triggerId === 'trigger_tictactoe_scroll' && tictactoeSolved) {
-    return makeResult({ state, ok: false, error: 'SCROLL_ALREADY_SOLVED' });
-  }
-
-  if (triggerId === 'trigger_door_seal' && !tictactoeSolved) {
-    return makeResult({ state, ok: false, error: 'DOOR_LOCKED_UNTIL_SCROLL_SOLVED' });
-  }
+  const alchSlidingSolved = !!state?.public?.alchEastSlidingLock?.solved;
 
   const widgetMap = {
     // --- WIZARD ---
@@ -252,42 +254,32 @@ function routeWidgetTriggers(state, action) {
     trigger_key_vase: "vase_puzzle",
 
     // --- ALCHEMIST ---
-
     trigger_drawer: 'alch_drawer_puzzle',
-
     trigger_mortar: 'alch:mortar',
     trigger_alch_mortar: 'alch:mortar',
-
     trigger_transmuter: 'transmuter_puzzle',
     trigger_alch_transmuter: 'transmuter_puzzle',
-
     trigger_portrait_books: 'portrait_books_puzzle',
     trigger_alch_portrait_books: 'portrait_books_puzzle',
     trigger_portrait: 'portrait_books_puzzle',
-
     trigger_flask_transfer: 'flask_transfer_puzzle',
     trigger_alch_flask_transfer: 'flask_transfer_puzzle',
     trigger_flasks: 'flask_transfer_puzzle',
-
     trigger_west_codebox: 'west_codebox_puzzle',
     trigger_alch_west_codebox: 'west_codebox_puzzle',
     trigger_west_jigsaw: 'west_codebox_puzzle',
-
     trigger_north_hierarchy_note: 'north_hierarchy_note_puzzle',
     trigger_alch_north_hierarchy_note: 'north_hierarchy_note_puzzle',
     trigger_hierarchy_note: 'north_hierarchy_note_puzzle',
-
     trigger_statue_pose: 'statue_pose_puzzle',
     trigger_alch_statue_pose: 'statue_pose_puzzle',
     trigger_statue: 'statue_pose_puzzle',
-
     trigger_east_sliding_lock: 'east_sliding_lock_puzzle',
     trigger_alch_east_sliding_lock: 'east_sliding_lock_puzzle',
-
-    trigger_east_door_sync: 'east_door_sync_puzzle',
-    trigger_alch_east_door_sync: 'east_door_sync_puzzle',
-    trigger_east_door: 'east_door_sync_puzzle',
-
+    trigger_east_door_sync: 'alch_east_door',
+    trigger_alch_east_door_sync: 'alch_east_door',
+    trigger_east_door: 'alch_east_door',
+    trigger_alch_east_door: 'alch_east_door',
     trigger_light_beam_grid: 'light_beam_grid_puzzle',
     trigger_alch_light_beam_grid: 'light_beam_grid_puzzle',
     trigger_mirror_grid: 'light_beam_grid_puzzle',
@@ -298,9 +290,42 @@ function routeWidgetTriggers(state, action) {
     trigger_final_plates: 'final_sync_plates',
     trigger_final_door: 'final_door_panel',
   };
-
   const widget = widgetMap[triggerId];
   if (!widget) return null;
+
+  if (triggerVerb === 'CLOSE') {
+    return makeResult({
+      state,
+      ok: true,
+      error: null,
+      diff: { activeWidget: null },
+    });
+  }
+
+  if (triggerId === 'trigger_tictactoe_scroll' && tictactoeSolved) {
+    return makeResult({ state, ok: false, error: 'SCROLL_ALREADY_SOLVED' });
+  }
+
+  if (triggerId === 'trigger_door_seal' && !tictactoeSolved) {
+    return makeResult({ state, ok: false, error: 'DOOR_LOCKED_UNTIL_SCROLL_SOLVED' });
+  }
+
+  if (
+    (triggerId === 'trigger_east_sliding_lock' || triggerId === 'trigger_alch_east_sliding_lock') &&
+    alchSlidingSolved
+  ) {
+    return makeResult({ state, ok: false, error: 'EAST_SLIDING_LOCK_ALREADY_SOLVED' });
+  }
+
+  if (
+    (triggerId === 'trigger_east_door' ||
+      triggerId === 'trigger_alch_east_door' ||
+      triggerId === 'trigger_east_door_sync' ||
+      triggerId === 'trigger_alch_east_door_sync') &&
+    !alchSlidingSolved
+  ) {
+    return makeResult({ state, ok: false, error: 'ALCH_DOOR_LOCK_HIDDEN_UNTIL_SLIDING_SOLVED' });
+  }
 
   return makeResult({
     state,

@@ -97,7 +97,10 @@ export function apply(state, action, now, ctx = {}) {
         next.keyInserted = true;
       }
 
-      return ok(next, { keyInserted: next.keyInserted });
+      return ok(next, {
+        keyInserted: next.keyInserted,
+        activeWidget: null,
+      });
     }
 
     case 'press': {
