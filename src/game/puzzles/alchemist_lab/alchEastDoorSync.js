@@ -50,7 +50,7 @@ export function init() {
   return {
     keyInserted: false,
     opened: false,
-    syncWindowMs: 1800,
+    syncWindowMs: 1000,
     presses: {}, // { playerId: timestampMs }
     soloArmed: false,
     soloArmedAt: null,
@@ -114,7 +114,18 @@ export function apply(state, action, now, ctx = {}) {
       const playerId = String(action?.playerId || '').trim();
       if (!playerId) return fail(state, 'MISSING_PLAYER_ID');
 
+      const soloMode = isSoloMode(ctx);
       next.attempts += 1;
+
+      if (!soloMode) {
+        return ok(next, {
+          opened: next.opened,
+          armedPlayers: 0,
+          soloArmed: false,
+          attempts: next.attempts,
+        });
+      }
+
       next.opened = true;
       next.lastOpenedAt = nowMs;
       next.presses = {};
@@ -125,7 +136,7 @@ export function apply(state, action, now, ctx = {}) {
         opened: next.opened,
         armedPlayers: 0,
         soloArmed: false,
-        attempts: next.attempts
+        attempts: next.attempts,
       });
     }
 

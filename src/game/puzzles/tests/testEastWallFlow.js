@@ -86,14 +86,24 @@ test('East wall: sliding lock + key insert + sync press opens door', async () =>
   // key consumed once
   assert.equal(Number(live.state.internal.inventory.GOLDEN_KEY ?? 0), 0);
 
-  // 4) sync press by two distinct players within time window
-  r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-door-switch', 'press', {}));
+  // 4) prep wizard door so both doors can be opened in sync
+  live.state.public.tictactoe_scroll ??= {};
+  live.state.public.tictactoe_scroll.solved = true;
+  live.state.internal.inventory.ASH_KEY = 1;
+
+  r = rm.applyAction(roomId, mkAction('sockA', 'puzzle_door_seal', 'INSERT', { item: 'ASH_KEY' }));
   assert.equal(r.ok, true, r.error);
-  assert.equal(!!live.state.public?.alchEastDoorSync?.opened, false);
+  assert.equal(!!live.state.public?.door_seal?.openable, true);
+
+  // 5) coop sync: wizard door open + alch door press within window
+  r = rm.applyAction(roomId, mkAction('sockA', 'puzzle_door_seal', 'OPEN', {}));
+  assert.equal(r.ok, true, r.error);
+  assert.equal(!!live.state.public?.door_seal?.opened, false);
 
   r = rm.applyAction(roomId, mkAction('sockB', 'alch:east-door-switch', 'press', {}));
   assert.equal(r.ok, true, r.error);
 
+  assert.equal(!!live.state.public?.door_seal?.opened, true);
   assert.equal(!!live.state.public?.alchEastDoorSync?.opened, true);
   assert.equal(!!live.state.public?.doorState?.opened, true);
 });

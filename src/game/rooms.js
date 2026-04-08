@@ -18,7 +18,7 @@ const { STARTER_INVENTORY, toPublicInventory, fromPublicInventory, cloneBag, nor
   ensureInventory, precheckInventoryForAction, applyInventoryBridge, getInventoryForPlayer } = Inventory;
 
 const SOLO_CHAMBERS = Object.freeze(['wizard_library', 'alchemist_lab', 'corridor']);
-const DOOR_SYNC_WINDOW_MS = 2000;
+const DOOR_SYNC_WINDOW_MS = 1000;
 const COOP_ROLE_TO_CHAMBER = Object.freeze({
   A: 'wizard_library',
   B: 'alchemist_lab',
@@ -146,9 +146,13 @@ function normalizeViewIndex(value, roomType) {
 function buildChamberState(roomType, viewIndex = 0) {
   const resolvedRoomType = normalizeDisplayRoomType(roomType, roomType);
   const views = getRoomViews(resolvedRoomType);
+  let normalizedIndex = normalizeViewIndex(viewIndex, resolvedRoomType);
+  if (resolvedRoomType === 'corridor') {
+    normalizedIndex = 1;
+  }
   return {
     roomType: resolvedRoomType,
-    viewIndex: normalizeViewIndex(viewIndex, resolvedRoomType),
+    viewIndex: normalizedIndex,
     views,
   };
 }
@@ -575,6 +579,7 @@ export class RoomManager {
     if (room.completed) return { ok: false, error: 'ROOM_ALREADY_COMPLETED' };
 
     ensureInventory(room, action?.playerId || null);
+    const nowMs = Date.now();
 
     // 1) Normalize (Inventory.js)
     const normalizedAction = normalizeActionItems(action);
@@ -609,6 +614,7 @@ export class RoomManager {
 
     // A. Wizard Door
     const wizDoorDiff = this._checkWizardDoorTriggers(room);
+    const coopDoorSync = this._applyCoopDoorSync(room, prevPublic, normalizedAction, nowMs);
     const wizDoorOpenedAtChanged = this._updateWizardDoorOpenedAt(room, prevPublic);
     // B. Alchemist Door
     const alchDoorChanged = this._updateAlchemistDoorState(room, normalizedAction);
@@ -626,6 +632,10 @@ export class RoomManager {
 
     // Merge Diffs
     const diff = { ...(res.diff ?? {}), ...wizDoorDiff };
+    if (coopDoorSync?.changed) {
+      if (room.state.public?.door_seal) diff.door_seal = room.state.public.door_seal;
+      if (room.state.public?.alchEastDoorSync) diff.alchEastDoorSync = room.state.public.alchEastDoorSync;
+    }
     if (invChanged) diff.inventory = room.state.public.inventory;
     if (wizDoorOpenedAtChanged) {
         diff.door_seal = room.state.public.door_seal;
@@ -688,6 +698,107 @@ export class RoomManager {
       return true;
     }
     return false;
+  }
+
+  _applyCoopDoorSync(room, prevPublic, action, nowMs) {
+    const pub = room?.state?.public;
+    if (!pub) return { changed: false, diff: {} };
+
+    if (normalizeGameMode(pub.mode) !== 'coop') {
+      return { changed: false, diff: {} };
+    }
+
+    const prevWizardOpened = !!prevPublic?.door_seal?.opened;
+    const prevAlchOpened = !!prevPublic?.alchEastDoorSync?.opened;
+    if (prevWizardOpened || prevAlchOpened) {
+      return { changed: false, diff: {} };
+    }
+
+    const syncState = room.state.internal.coopDoorSync || { wizardAt: null, alchAt: null };
+    room.state.internal.coopDoorSync = syncState;
+
+    const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+    const windowMs = DOOR_SYNC_WINDOW_MS;
+
+    if (Number.isFinite(syncState.wizardAt) && now - syncState.wizardAt > windowMs) {
+      syncState.wizardAt = null;
+    }
+    if (Number.isFinite(syncState.alchAt) && now - syncState.alchAt > windowMs) {
+      syncState.alchAt = null;
+    }
+
+    const verb = String(action?.verb || '').trim().toUpperCase();
+    const objectId = String(action?.objectId || '').trim();
+    const canonicalObjectId = String(action?.canonicalObjectId || '').trim();
+
+    const isWizardAttempt =
+      verb === 'OPEN' &&
+      (objectId === 'puzzle_door_seal' || canonicalObjectId === 'puzzle_door_seal');
+    const isAlchAttempt =
+      verb === 'PRESS' &&
+      (objectId === 'alch:east-door-switch' ||
+        objectId === 'alch:east-door-mechanism' ||
+        objectId === 'puzzle_east_door_sync' ||
+        canonicalObjectId === 'alch:east-door-switch' ||
+        canonicalObjectId === 'alch:east-door-mechanism');
+
+    if (isWizardAttempt) syncState.wizardAt = now;
+    if (isAlchAttempt) syncState.alchAt = now;
+
+    const synced =
+      Number.isFinite(syncState.wizardAt) &&
+      Number.isFinite(syncState.alchAt) &&
+      Math.abs(syncState.wizardAt - syncState.alchAt) <= windowMs;
+
+    let changed = false;
+    if (synced) {
+      if (room.state.internal?.door_seal && !room.state.internal.door_seal.opened) {
+        room.state.internal.door_seal.opened = true;
+        changed = true;
+      }
+      if (pub?.door_seal && !pub.door_seal.opened) {
+        pub.door_seal.opened = true;
+        pub.door_seal.openedAt = now;
+        changed = true;
+      }
+
+      if (room.state.internal?.alchEastDoorSync && !room.state.internal.alchEastDoorSync.opened) {
+        room.state.internal.alchEastDoorSync.opened = true;
+        room.state.internal.alchEastDoorSync.lastOpenedAt = now;
+        changed = true;
+      }
+      if (pub?.alchEastDoorSync && !pub.alchEastDoorSync.opened) {
+        pub.alchEastDoorSync.opened = true;
+        pub.alchEastDoorSync.lastOpenedAt = now;
+        changed = true;
+      }
+
+      syncState.wizardAt = null;
+      syncState.alchAt = null;
+    } else {
+      if (room.state.internal?.door_seal?.opened) {
+        room.state.internal.door_seal.opened = false;
+        changed = true;
+      }
+      if (pub?.door_seal?.opened) {
+        pub.door_seal.opened = false;
+        pub.door_seal.openedAt = null;
+        changed = true;
+      }
+
+      if (room.state.internal?.alchEastDoorSync?.opened) {
+        room.state.internal.alchEastDoorSync.opened = false;
+        room.state.internal.alchEastDoorSync.lastOpenedAt = null;
+        changed = true;
+      }
+      if (pub?.alchEastDoorSync?.opened) {
+        pub.alchEastDoorSync.opened = false;
+        pub.alchEastDoorSync.lastOpenedAt = null;
+        changed = true;
+      }
+    }
+
+    return { changed, diff: changed ? { door_seal: pub.door_seal, alchEastDoorSync: pub.alchEastDoorSync } : {} };
   }
 
   // --- ALCHEMIST'S DOOR LOGIC  ---

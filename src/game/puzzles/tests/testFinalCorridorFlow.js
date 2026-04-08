@@ -64,7 +64,9 @@ test('Final corridor flow: runes -> keyword -> sync plates -> win', async () => 
 
   r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-door-lock', 'insert', { item: 'GOLDEN_KEY' }));
   assert.equal(r.ok, true, r.error);
-  r = rm.applyAction(roomId, mkAction('sockA', 'alch:east-door-switch', 'press', {}));
+
+  // Coop sync: wizard door open + alch door press within time window
+  r = rm.applyAction(roomId, mkAction('sockA', 'puzzle_door_seal', 'OPEN', {}));
   assert.equal(r.ok, true, r.error);
   r = rm.applyAction(roomId, mkAction('sockB', 'alch:east-door-switch', 'press', {}));
   assert.equal(r.ok, true, r.error);
