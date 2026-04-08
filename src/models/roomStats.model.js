@@ -22,18 +22,26 @@ import db from '../config/db.js';
  *   )
  */
 export async function recordRoomStarted(room) {
-  const startedAt = room.startedAt ?? Date.now();
+  const startedAt =
+    room.startedAt ??
+    room.state?.public?.game?.startedAt ??
+    Date.now();
   const startedSec = startedAt / 1000;
+  const roomName =
+    room.roomName ??
+    room.state?.public?.roomType ??
+    null;
 
   // created_at hat einen DEFAULT, kann also weggelassen werden
   await db.query(
     `
-    INSERT INTO rooms (id, started_at, is_completed)
-    VALUES ($1, to_timestamp($2), false)
+    INSERT INTO rooms (id, room_name, started_at, is_completed)
+    VALUES ($1, $2, to_timestamp($3), false)
     ON CONFLICT (id) DO UPDATE
-      SET started_at = EXCLUDED.started_at
+      SET started_at = EXCLUDED.started_at,
+          room_name = COALESCE(rooms.room_name, EXCLUDED.room_name)
     `,
-    [room.id, startedSec]
+    [room.id, roomName, startedSec]
   );
 }
 
@@ -41,26 +49,44 @@ export async function recordRoomStarted(room) {
  * Raumabschluss in "rooms" aktualisieren (Endzeit + Dauer).
  */
 export async function recordRoomCompleted(room) {
-  const endedAt = room.completedAt ?? Date.now();
+  const startedAt =
+    room.startedAt ??
+    room.state?.public?.game?.startedAt ??
+    null;
+  const startedSec = Number.isFinite(startedAt) ? startedAt / 1000 : null;
+
+  const endedAt =
+    room.completedAt ??
+    room.state?.public?.game?.endedAt ??
+    Date.now();
   const endedSec = endedAt / 1000;
+  const roomName =
+    room.roomName ??
+    room.state?.public?.roomType ??
+    null;
 
   let durationSeconds = null;
-  if (room.startedAt && room.completedAt) {
+  if (startedAt && endedAt) {
     durationSeconds = Math.max(
       0,
-      Math.round((room.completedAt - room.startedAt) / 1000)
+      Math.round((endedAt - startedAt) / 1000)
     );
   }
 
   await db.query(
     `
-    UPDATE rooms
-       SET ended_at = to_timestamp($2),
-           duration_seconds = $3,
-           is_completed = true
-     WHERE id = $1
+    INSERT INTO rooms
+      (id, room_name, started_at, ended_at, duration_seconds, is_completed)
+    VALUES
+      ($1, $2, to_timestamp($3), to_timestamp($4), $5, true)
+    ON CONFLICT (id) DO UPDATE
+      SET ended_at = EXCLUDED.ended_at,
+          duration_seconds = EXCLUDED.duration_seconds,
+          is_completed = true,
+          started_at = COALESCE(rooms.started_at, EXCLUDED.started_at),
+          room_name = COALESCE(rooms.room_name, EXCLUDED.room_name)
     `,
-    [room.id, endedSec, durationSeconds]
+    [room.id, roomName, startedSec, endedSec, durationSeconds]
   );
 }
 

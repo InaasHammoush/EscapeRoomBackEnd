@@ -1015,6 +1015,10 @@ export class RoomManager {
       data?.state?.roomType || 'default'
     );
 
+    const snapGame = data?.state?.game || {};
+    const snapStartedAt = Number(snapGame?.startedAt || 0);
+    const snapEndedAt = Number(snapGame?.endedAt || 0);
+
     const room = {
       id,
       roomName: data?.state?.roomType || 'default',
@@ -1023,8 +1027,8 @@ export class RoomManager {
       started: data.started ?? false,
       completed: data.completed ?? false,
       createdAt: Date.now(),
-      startedAt: null,
-      completedAt: null,
+      startedAt: Number.isFinite(snapStartedAt) && snapStartedAt > 0 ? snapStartedAt : null,
+      completedAt: Number.isFinite(snapEndedAt) && snapEndedAt > 0 ? snapEndedAt : null,
       players: new Map(), // wird bei Rejoin neu aufgebaut
       state: {
         public: publicState,
@@ -1099,8 +1103,20 @@ export class RoomManager {
     if (room.completed) return;
 
     if (this.completionPredicate(room.state)) {
+      if (!room.startedAt) {
+        const startedAtFromGame = Number(room.state?.public?.game?.startedAt || 0);
+        if (Number.isFinite(startedAtFromGame) && startedAtFromGame > 0) {
+          room.startedAt = startedAtFromGame;
+        }
+      }
+
+      const endedAtFromGame = Number(room.state?.public?.game?.endedAt || 0);
+      room.completedAt =
+        Number.isFinite(endedAtFromGame) && endedAtFromGame > 0
+          ? endedAtFromGame
+          : Date.now();
+
       room.completed = true;
-      room.completedAt = Date.now();
       this._touchSeq(room);
       await this._saveSnapshot(room.id);
       this._persistLocal(room.id);
