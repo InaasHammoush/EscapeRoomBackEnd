@@ -1,5 +1,6 @@
 import * as userModel from '../models/user.model.js';
 import { verifyAccessToken } from '../util/token.js';
+import { assertTokenNotRevoked } from '../services/tokenSession.service.js';
 
 function extractBearerToken(authHeader) {
   if (typeof authHeader !== 'string') return null;
@@ -21,6 +22,7 @@ export async function authenticateToken(req, res, next) {
     }
 
     const payload = verifyAccessToken(token);
+    await assertTokenNotRevoked(payload);
     const user = await userModel.findActiveUserById(payload.id);
 
     if (!user || !user.email_verified) {
@@ -54,6 +56,7 @@ export async function isAuthenticated(req, res, next) {
 
   try {
     const payload = verifyAccessToken(token);
+    await assertTokenNotRevoked(payload);
     const user = await userModel.findActiveUserById(payload.id);
 
     if (!user || !user.email_verified) {

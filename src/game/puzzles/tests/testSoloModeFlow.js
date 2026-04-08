@@ -78,7 +78,7 @@ test('Solo mode: chamber switching preserves room-local view and puzzle progress
   assert.deepEqual(live.state.public.alchEastSlidingLock.board, [1, 0, 2, 4, 8, 3, 7, 6, 5]);
 });
 
-test('Solo mode: east door sync can be completed sequentially by one player', async () => {
+test('Solo mode: east door opens on first press after key insert', async () => {
   const { rm, roomId, live } = await makeStartedSoloRoom('alchemist', 'alchemist');
   assert.ok(live);
 
@@ -95,11 +95,6 @@ test('Solo mode: east door sync can be completed sequentially by one player', as
 
   r = rm.applyAction(roomId, mkAction('sockSolo', 'alch:east-door-lock', 'insert', { item: 'GOLDEN_KEY' }));
   assert.equal(r.ok, true, r.error);
-
-  r = rm.applyAction(roomId, mkAction('sockSolo', 'alch:east-door-switch', 'press'));
-  assert.equal(r.ok, true, r.error);
-  assert.equal(!!live.state.public.alchEastDoorSync.opened, false);
-  assert.equal(!!live.state.public.alchEastDoorSync.soloArmed, true);
 
   r = rm.applyAction(roomId, mkAction('sockSolo', 'alch:east-door-switch', 'press'));
   assert.equal(r.ok, true, r.error);
