@@ -4,10 +4,13 @@ dotenv.config();
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
-const DEFAULT_ALLOWED_ORIGIN = 'http://localhost:5173';
 const DEFAULT_HSTS_MAX_AGE = 60 * 60 * 24 * 180;
 const DEFAULT_SOCKET_BUFFER_SIZE = 64 * 1024;
 const DEFAULT_REFRESH_COOKIE_NAME = 'refreshToken';
+const DEFAULT_DEV_ALLOWED_ORIGINS = Object.freeze([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]);
 
 function parseBoolean(value, fallback = false) {
   if (value == null || value === '') return fallback;
@@ -28,16 +31,26 @@ function normalizeSameSite(value, fallback = 'strict') {
   return ['strict', 'lax', 'none'].includes(normalized) ? normalized : fallback;
 }
 
-function parseOrigins(value) {
-  return String(value ?? DEFAULT_ALLOWED_ORIGIN)
-    .split(',')
-    .map(origin => origin.trim().replace(/\/+$/, ''))
-    .filter(Boolean);
+function normalizeUrl(value) {
+  const normalized = String(value ?? '').trim().replace(/\/+$/, '');
+  return normalized || null;
 }
 
-function resolveTrustProxy(value) {
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function parseOrigins(value) {
+  return uniqueValues(
+    String(value ?? '')
+      .split(',')
+      .map(origin => normalizeUrl(origin))
+  );
+}
+
+function resolveTrustProxy(value, isProduction) {
   if (value == null || value === '') {
-    return process.env.NODE_ENV === 'production' ? 1 : false;
+    return isProduction ? 1 : false;
   }
 
   const normalized = String(value).trim();
@@ -50,15 +63,45 @@ function resolveTrustProxy(value) {
   return Number.isFinite(numeric) ? numeric : normalized;
 }
 
-const allowedOrigins = Object.freeze(parseOrigins(process.env.ORIGIN));
-const cookieDomain = process.env.COOKIE_DOMAIN?.trim() || undefined;
-const secureCookies = parseBoolean(
-  process.env.COOKIE_SECURE,
-  process.env.NODE_ENV === 'production'
+function resolveAllowedOrigins(rawOrigins, isProduction) {
+  if (rawOrigins) {
+    return parseOrigins(rawOrigins);
+  }
+
+  if (isProduction) {
+    return [];
+  }
+
+  return [...DEFAULT_DEV_ALLOWED_ORIGINS];
+}
+
+function resolveFrontendUrl(rawFrontendUrl, isProduction, allowedOrigins) {
+  if (rawFrontendUrl) {
+    return normalizeUrl(rawFrontendUrl);
+  }
+
+  if (allowedOrigins.length > 0) {
+    return allowedOrigins[0];
+  }
+
+  if (!isProduction) {
+    return DEFAULT_DEV_ALLOWED_ORIGINS[0];
+  }
+
+  return null;
+}
+
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = Object.freeze(resolveAllowedOrigins(process.env.ORIGIN, isProduction));
+const frontendUrl = resolveFrontendUrl(process.env.FRONTEND_URL, isProduction, allowedOrigins);
+const cookieDomain = process.env.COOKIE_DOMAIN?.trim() || null;
+const cookieSecure = parseBoolean(process.env.COOKIE_SECURE, isProduction);
+const cookieSameSite = normalizeSameSite(
+  process.env.COOKIE_SAME_SITE,
+  isProduction ? 'strict' : 'lax'
 );
-const sameSite = normalizeSameSite(process.env.COOKIE_SAME_SITE, 'strict');
 const refreshCookieName =
-  secureCookies && !cookieDomain
+  cookieSecure && !cookieDomain
     ? '__Host-refreshToken'
     : DEFAULT_REFRESH_COOKIE_NAME;
 const refreshCookieNames = Object.freeze(
@@ -68,31 +111,47 @@ const refreshCookieNames = Object.freeze(
 );
 const refreshCookieOptions = Object.freeze({
   httpOnly: true,
-  secure: secureCookies,
-  sameSite,
+  secure: cookieSecure,
+  sameSite: cookieSameSite,
   path: '/',
   maxAge: 7 * 24 * 60 * 60 * 1000,
   ...(cookieDomain ? { domain: cookieDomain } : {}),
 });
 
 export const securityConfig = Object.freeze({
-  isProduction: process.env.NODE_ENV === 'production',
+  isProduction,
+  isDevelopment: !isProduction,
+  environmentName: isProduction ? 'production' : 'development',
   allowedOrigins,
-  trustProxy: resolveTrustProxy(process.env.TRUST_PROXY),
+  frontendUrl,
+  trustProxy: resolveTrustProxy(process.env.TRUST_PROXY, isProduction),
   jsonBodyLimit: process.env.JSON_BODY_LIMIT?.trim() || '32kb',
   urlencodedBodyLimit: process.env.URLENCODED_BODY_LIMIT?.trim() || '16kb',
   socketMaxHttpBufferSize: parseInteger(
     process.env.SOCKET_MAX_HTTP_BUFFER_SIZE,
     DEFAULT_SOCKET_BUFFER_SIZE
   ),
+  serverRequestTimeoutMs: parseInteger(process.env.SERVER_REQUEST_TIMEOUT_MS, 60_000),
+  serverHeadersTimeoutMs: parseInteger(process.env.SERVER_HEADERS_TIMEOUT_MS, 65_000),
+  serverKeepAliveTimeoutMs: parseInteger(
+    process.env.SERVER_KEEP_ALIVE_TIMEOUT_MS,
+    5_000
+  ),
   hstsMaxAge: parseInteger(process.env.HSTS_MAX_AGE, DEFAULT_HSTS_MAX_AGE),
   tokenIssuer: process.env.JWT_ISSUER?.trim() || 'escape-room-backend',
   tokenAudience: process.env.JWT_AUDIENCE?.trim() || 'escape-room-clients',
   accessTokenTtl: process.env.ACCESS_TOKEN_TTL?.trim() || '15m',
   refreshTokenTtl: process.env.REFRESH_TOKEN_TTL?.trim() || '7d',
+  refreshTokenReuseGraceMs: parseInteger(
+    process.env.REFRESH_TOKEN_REUSE_GRACE_MS,
+    5_000
+  ),
   refreshCookieName,
   refreshCookieNames,
   refreshCookieOptions,
+  cookieDomain,
+  cookieSecure,
+  cookieSameSite,
   socketDebugLogsEnabled: parseBoolean(process.env.SOCKET_DEBUG_LOGS, false),
 });
 
@@ -133,18 +192,50 @@ export function validateSecurityConfiguration() {
     throw new Error('Wildcard CORS origins are not allowed in production');
   }
 
+  if (!securityConfig.frontendUrl) {
+    const message = 'FRONTEND_URL could not be derived from config';
+    if (securityConfig.isProduction) {
+      throw new Error(message);
+    }
+    console.warn(message);
+  } else if (!process.env.FRONTEND_URL && securityConfig.isProduction) {
+    console.warn(
+      `FRONTEND_URL is not set; using ${securityConfig.frontendUrl} for generated links`
+    );
+  }
+
   if (refreshCookieName.startsWith('__Host-') && cookieDomain) {
     throw new Error('__Host- cookies cannot be used together with COOKIE_DOMAIN');
   }
 
-  if (sameSite === 'none' && !secureCookies) {
+  if (cookieSameSite === 'none' && !cookieSecure) {
     throw new Error('COOKIE_SAME_SITE=none requires COOKIE_SECURE=true');
   }
 }
 
+export function describeSecurityConfiguration() {
+  return {
+    environment: securityConfig.environmentName,
+    allowedOrigins: [...securityConfig.allowedOrigins],
+    trustProxy: securityConfig.trustProxy,
+    frontendUrl: securityConfig.frontendUrl,
+    cookie: {
+      name: securityConfig.refreshCookieName,
+      secure: securityConfig.cookieSecure,
+      sameSite: securityConfig.cookieSameSite,
+      domain: securityConfig.cookieDomain,
+    },
+    httpServer: {
+      requestTimeoutMs: securityConfig.serverRequestTimeoutMs,
+      headersTimeoutMs: securityConfig.serverHeadersTimeoutMs,
+      keepAliveTimeoutMs: securityConfig.serverKeepAliveTimeoutMs,
+    },
+  };
+}
+
 export function isOriginAllowed(origin) {
   const normalizedOrigin = typeof origin === 'string'
-    ? origin.trim().replace(/\/+$/, '')
+    ? normalizeUrl(origin)
     : origin;
 
   return !normalizedOrigin || securityConfig.allowedOrigins.includes(normalizedOrigin);

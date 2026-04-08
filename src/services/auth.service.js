@@ -5,7 +5,13 @@ import crypto from 'crypto';
 import * as userModel from '../models/user.model.js';
 import * as passwordResetModel from '../models/passwordReset.model.js';
 import emailService from '../util/nodemailer.js';
-import { signAccessToken, signRefreshToken } from '../util/token.js';
+import { verifyRefreshToken } from '../util/token.js';
+import {
+  issueTokensForUser,
+  revokeAllUserTokens,
+  revokeRefreshTokenString,
+  rotateRefreshToken
+} from './tokenSession.service.js';
 
 const parsedBcryptRounds = Number.parseInt(process.env.BCRYPT_SALT_ROUNDS ?? '12', 10);
 const BCRYPT_ROUNDS =
@@ -42,8 +48,7 @@ export async function loginUser({ email, password }) {
 
   ensureEmailVerified(user);
 
-  const accessToken = signAccessToken(user);
-  const refreshToken = signRefreshToken(user);
+  const { accessToken, refreshToken } = await issueTokensForUser(user);
 
   return {
     accessToken,
@@ -78,6 +83,7 @@ export async function changeUserPassword(userID, oldPassword, newPassword) {
   const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await userModel.updateUserPassword(userID, hashedPassword);
   await passwordResetModel.deleteTokensByUserId(userID);
+  await revokeAllUserTokens(userID, 'password_changed');
   await emailService.sendPasswordChangedEmail(user.email);
 }
 
@@ -110,6 +116,7 @@ export async function resetUserPasswordWithToken(token, newPassword) {
   const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   await userModel.updateUserPassword(resetRecord.user_id, hashedPassword);
   await passwordResetModel.deleteTokensByUserId(resetRecord.user_id);
+  await revokeAllUserTokens(resetRecord.user_id, 'password_reset');
 
   const user = await userModel.findUserById(resetRecord.user_id);
   await emailService.sendPasswordChangedEmail(user.email);
@@ -139,6 +146,7 @@ export async function changeUserEmailAddress(userID, newEmail) {
     hashedToken,
     new Date(Date.now() + 3600000 * 24)
   );
+  await revokeAllUserTokens(userID, 'email_changed');
   await emailService.sendVerificationEmail(normalizedEmail, token);
 }
 
@@ -149,6 +157,7 @@ export async function softDeleteUserAccount(userID) {
   }
 
   await userModel.softDeleteUserById(userID);
+  await revokeAllUserTokens(userID, 'account_deleted');
   await emailService.sendAccountDeletionEmail(user.email);
 }
 
@@ -164,8 +173,32 @@ export async function recoverDeletedUserAccount(email) {
   }
 
   await userModel.recoverDeletedUserByEmail(normalizedEmail);
+  await revokeAllUserTokens(user.id, 'account_recovered');
   await emailService.sendAccountRecoveryEmail(normalizedEmail);
   return true;
+}
+
+export async function logoutUser(userId, refreshToken) {
+  await revokeRefreshTokenString(refreshToken, userId);
+}
+
+export async function refreshUserSession(refreshToken) {
+  const userId = normalizeTokenUserId(refreshToken);
+  const user = await userModel.findActiveUserById(userId);
+
+  if (!user || !user.email_verified) {
+    await revokeAllUserTokens(userId, 'account_not_authorized');
+
+    throw new Error('Invalid refresh token');
+  }
+
+  const tokens = await rotateRefreshToken(refreshToken, user);
+
+  return {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    user: { id: user.id, username: user.username },
+  };
 }
 
 function generateVerificationToken() {
@@ -182,4 +215,9 @@ function ensureEmailVerified(user) {
 
 function normalizeEmail(email) {
   return String(email ?? '').trim().toLowerCase();
+}
+
+function normalizeTokenUserId(refreshToken) {
+  const decoded = verifyRefreshToken(refreshToken);
+  return decoded.id;
 }

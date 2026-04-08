@@ -1,12 +1,12 @@
 import express from 'express';
 
-import * as userModel from '../models/user.model.js';
+import * as AuthService from '../services/auth.service.js';
 import {
   clearRefreshTokenCookie,
-  readRefreshTokenCookie
+  readRefreshTokenCookie,
+  setRefreshTokenCookie
 } from '../config/security.js';
 import { rateLimit } from '../middleware/rateLimit.js';
-import { signAccessToken, verifyRefreshToken } from '../util/token.js';
 
 const router = express.Router();
 
@@ -27,19 +27,15 @@ router.post('/refresh', refreshLimiter, async (req, res) => {
   if (!token) return res.status(401).json({ error: 'No refresh token' });
 
   try {
-    const decoded = verifyRefreshToken(token);
-    const user = await userModel.findActiveUserById(decoded.id);
-
-    if (!user || !user.email_verified) {
-      clearRefreshTokenCookie(res);
-      return res.status(403).json({ error: 'Invalid refresh token' });
+    const { accessToken, refreshToken, user } =
+      await AuthService.refreshUserSession(token);
+    if (refreshToken) {
+      setRefreshTokenCookie(res, refreshToken);
     }
-
-    const accessToken = signAccessToken(user);
 
     return res.json({
       accessToken,
-      user: { id: user.id, username: user.username },
+      user,
     });
   } catch {
     clearRefreshTokenCookie(res);

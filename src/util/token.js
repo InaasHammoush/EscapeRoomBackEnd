@@ -14,21 +14,23 @@ function requireSecret(secret, envName) {
   return secret;
 }
 
-function buildTokenPayload(user, tokenType) {
+function buildTokenPayload(user, tokenType, extraClaims = {}) {
   return {
     id: user.id,
     username: user.username,
     tokenType,
+    authTimeMs: extraClaims.authTimeMs ?? Date.now(),
+    ...extraClaims,
   };
 }
 
-function buildTokenOptions(userId, expiresIn) {
+function buildTokenOptions(userId, expiresIn, options = {}) {
   return {
     algorithm: 'HS256',
     audience: securityConfig.tokenAudience,
     expiresIn,
     issuer: securityConfig.tokenIssuer,
-    jwtid: crypto.randomUUID(),
+    jwtid: options.jwtid ?? crypto.randomUUID(),
     subject: String(userId),
   };
 }
@@ -63,9 +65,9 @@ export function signAccessToken(user) {
   );
 }
 
-export function signRefreshToken(user) {
+export function signRefreshToken(user, extraClaims = {}) {
   return jwt.sign(
-    buildTokenPayload(user, REFRESH_TOKEN_TYPE),
+    buildTokenPayload(user, REFRESH_TOKEN_TYPE, extraClaims),
     requireSecret(process.env.REFRESH_SECRET, 'REFRESH_SECRET'),
     buildTokenOptions(user.id, securityConfig.refreshTokenTtl)
   );

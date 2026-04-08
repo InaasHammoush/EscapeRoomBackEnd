@@ -1,11 +1,10 @@
-import { createClient } from 'redis';
 import crypto from 'node:crypto';
 import { upsertProfile, insertScore } from '../infra/db.js';
+import { getRedisClient } from '../config/redis.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const r = createClient({ url: process.env.REDIS_URL || 'redis://127.0.0.1:6379' });
-await r.connect();
+const r = await getRedisClient();
 
 let lastId = (await r.get('events:scores:lastId')) || '0-0';
 

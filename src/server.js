@@ -4,16 +4,22 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import { Server } from 'socket.io';
-import { createClient } from 'redis';
 import { createAdapter } from '@socket.io/redis-adapter';
 import cookieParser from 'cookie-parser';
 
 import {
   buildCorsOptions,
+  describeSecurityConfiguration,
   isOriginAllowed,
   securityConfig,
   validateSecurityConfiguration
 } from './config/security.js';
+import { describeDatabaseConfiguration } from './config/db.js';
+import {
+  createRedisConnection,
+  describeRedisConfiguration,
+  getRedisClient
+} from './config/redis.js';
 import { JsonStore } from './store/jsonStore.js';
 import authRoutes from './routes/auth.routes.js';
 import tokenRoutes from './routes/token.routes.js';
@@ -23,9 +29,49 @@ import { RoomManager } from './game/rooms.js';
 import { authenticateToken } from './middleware/auth.middleware.js';
 import { applyHttpSecurity } from './middleware/httpSecurity.js';
 import leaderboardRoutes from './routes/leaderboard.routes.js';
+import { assertTokenNotRevoked } from './services/tokenSession.service.js';
 import * as userModel from './models/user.model.js';
 
 validateSecurityConfiguration();
+
+function yesNo(value) {
+  return value ? 'yes' : 'no';
+}
+
+function formatDiagnosticValue(value) {
+  if (typeof value === 'boolean') return yesNo(value);
+  if (value == null || value === '') return '(none)';
+  return String(value);
+}
+
+function logStartupDiagnostics() {
+  const securityDiagnostics = describeSecurityConfiguration();
+  const dbDiagnostics = describeDatabaseConfiguration();
+  const redisDiagnostics = describeRedisConfiguration();
+
+  console.info(`[startup] Environment: ${securityDiagnostics.environment}`);
+  console.info(
+    `[startup] Allowed origins: ${securityDiagnostics.allowedOrigins.join(', ')}`
+  );
+  console.info(
+    `[startup] Frontend URL: ${formatDiagnosticValue(securityDiagnostics.frontendUrl)}`
+  );
+  console.info(
+    `[startup] Trust proxy: ${formatDiagnosticValue(securityDiagnostics.trustProxy)}`
+  );
+  console.info(
+    `[startup] Refresh cookie: name=${securityDiagnostics.cookie.name}, secure=${yesNo(securityDiagnostics.cookie.secure)}, sameSite=${securityDiagnostics.cookie.sameSite}, domain=${formatDiagnosticValue(securityDiagnostics.cookie.domain)}`
+  );
+  console.info(
+    `[startup] HTTP timeouts: request=${securityDiagnostics.httpServer.requestTimeoutMs}ms, headers=${securityDiagnostics.httpServer.headersTimeoutMs}ms, keepAlive=${securityDiagnostics.httpServer.keepAliveTimeoutMs}ms`
+  );
+  console.info(
+    `[startup] DB TLS: enabled=${yesNo(dbDiagnostics.sslEnabled)}, rejectUnauthorized=${yesNo(dbDiagnostics.sslRejectUnauthorized)}, caConfigured=${yesNo(dbDiagnostics.sslCaConfigured)}`
+  );
+  console.info(
+    `[startup] Redis: url=${redisDiagnostics.url}, tls=${yesNo(redisDiagnostics.tlsEnabled)}, rejectUnauthorized=${yesNo(redisDiagnostics.tlsRejectUnauthorized)}, caConfigured=${yesNo(redisDiagnostics.tlsCaConfigured)}, keyPrefix=${redisDiagnostics.keyPrefix}`
+  );
+}
 
 const app = express();
 const corsOptions = buildCorsOptions();
@@ -115,6 +161,9 @@ function ensureLobbyRoom(sessionId) {
 
 
 const httpServer = http.createServer(app);
+httpServer.requestTimeout = securityConfig.serverRequestTimeoutMs;
+httpServer.headersTimeout = securityConfig.serverHeadersTimeoutMs;
+httpServer.keepAliveTimeout = securityConfig.serverKeepAliveTimeoutMs;
 
 const io = new Server(httpServer, {
   cors: {
@@ -155,6 +204,7 @@ io.use(async (socket, next) => {
 
   try {
     const decoded = verifyAccessToken(token);
+    await assertTokenNotRevoked(decoded);
     const user = await userModel.findActiveUserById(decoded.id);
 
     if (user && user.email_verified) {
@@ -169,11 +219,9 @@ io.use(async (socket, next) => {
   return next();
 });
 
-const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-const redisPub = createClient({ url: redisUrl });
-const redisSub = redisPub.duplicate();
+const redisPub = await getRedisClient();
+const redisSub = createRedisConnection('socket-sub');
 
-await redisPub.connect();
 await redisSub.connect();
 
 io.adapter(createAdapter(redisPub, redisSub));
@@ -189,6 +237,7 @@ const rooms = new RoomManager({
 
 rooms.startAutosave(30000);
 rooms.setCleanupInterval(600000, 600000);
+logStartupDiagnostics();
 
 io.on('connection', (socket) => {
   if (securityConfig.socketDebugLogsEnabled) {
@@ -239,7 +288,9 @@ io.on('connection', (socket) => {
 
       // eigenen Snapshot an den neuen Client zurückgeben
       const snapshot = rooms.snapshotFor(room.id, socket.id);
-      console.log("✅ SNAPSHOT DATA SENT:", snapshot.state.views);
+      if (securityConfig.socketDebugLogsEnabled) {
+        console.log('Snapshot data sent:', snapshot.state.views);
+      }
       io.to(socket.id).emit('state:snapshot', { snapshot });
       cb?.({ ok: true, snapshot });
     } catch (e) {
@@ -339,7 +390,9 @@ io.on('connection', (socket) => {
     'interact', 
     schemas.Interact, 
     async (payload, cb) => {
-      console.log("INTERACT payload received:", payload);
+      if (securityConfig.socketDebugLogsEnabled) {
+        console.log('INTERACT payload received:', payload);
+      }
       const { roomId, actionId, objectId, canonicalObjectId, verb, data } = payload;
       const result = rooms.applyAction(roomId, {
         actionId,

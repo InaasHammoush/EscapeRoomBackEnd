@@ -1,5 +1,6 @@
 // src/util/validation.js
 import { z } from 'zod';
+import { consumeRateLimit } from '../services/rateLimit.service.js';
 
 const CONTROL_CHAR_REGEX = /[\u0000-\u001F\u007F]/;
 
@@ -111,36 +112,16 @@ export const resetPasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
-const socketBuckets = new Map();
-let socketCleanupCounter = 0;
+async function checkSocketRateLimit(socket, event, { windowMs, max }) {
+  const result = await consumeRateLimit({
+    namespace: `socket:${event}`,
+    key: socket.id,
+    windowMs,
+    max,
+  });
 
-function cleanupSocketBuckets(now) {
-  socketCleanupCounter += 1;
-  if (socketCleanupCounter % 250 !== 0) return;
-
-  for (const [key, bucket] of socketBuckets.entries()) {
-    if (bucket.resetTime <= now) {
-      socketBuckets.delete(key);
-    }
-  }
-}
-
-function checkSocketRateLimit(socket, event, { windowMs, max }) {
-  const now = Date.now();
-  cleanupSocketBuckets(now);
-
-  const key = `${socket.id}:${event}`;
-  let bucket = socketBuckets.get(key);
-
-  if (!bucket || bucket.resetTime <= now) {
-    bucket = { count: 0, resetTime: now + windowMs };
-  }
-
-  bucket.count += 1;
-  socketBuckets.set(key, bucket);
-
-  if (bucket.count > max) {
-    return Math.max(0, bucket.resetTime - now);
+  if (result.exceeded) {
+    return result.retryAfterMs;
   }
 
   return null;
@@ -151,12 +132,12 @@ function checkSocketRateLimit(socket, event, { windowMs, max }) {
  */
 export function onSafe(socket, event, schema, handler, options = {}) {
   socket.on(event, async (payload, cb) => {
-    try {
-      if (options.rateLimit) {
-        const retryAfterMs = checkSocketRateLimit(
-          socket,
-          options.rateLimit.key ?? event,
-          options.rateLimit
+      try {
+        if (options.rateLimit) {
+          const retryAfterMs = await checkSocketRateLimit(
+            socket,
+            options.rateLimit.key ?? event,
+            options.rateLimit
         );
 
         if (retryAfterMs != null) {
