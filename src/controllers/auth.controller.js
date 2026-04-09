@@ -9,6 +9,7 @@ import {
 } from '../util/validation.js';
 import {
   clearRefreshTokenCookie,
+  readRefreshTokenCookie,
   setRefreshTokenCookie
 } from '../config/security.js';
 
@@ -35,8 +36,14 @@ export async function login(req, res) {
 }
 
 export async function logout(req, res) {
-  clearRefreshTokenCookie(res);
-  res.json({ message: 'Logged out successfully' });
+  try {
+    const refreshToken = readRefreshTokenCookie(req);
+    await AuthService.logoutUser(req.user.id, refreshToken);
+    clearRefreshTokenCookie(res);
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
 }
 
 export async function verifyEmail(req, res) {

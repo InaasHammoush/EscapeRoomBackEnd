@@ -4,6 +4,7 @@
  * logging, and templating capabilities.
  */
 import nodemailer from "nodemailer";
+import { securityConfig } from "../config/security.js";
 import log from "./log.js";
 
 // TODO: Change to production email
@@ -122,7 +123,7 @@ const emailService = {
 		try {
 			log.debug(`Sending verification email to ${email}`);
 
-			const verificationLink = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
+			const verificationLink = `${securityConfig.frontendUrl}/verify-email/${verificationToken}`;
 
 			const content = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -218,7 +219,7 @@ const emailService = {
 		try {
 			log.debug(`Sending password reset email to ${email}`);
 
-			const resetLink = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+			const resetLink = `${securityConfig.frontendUrl}/reset-password/${resetToken}`;
 
 			const content = `
 		<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -258,7 +259,7 @@ const emailService = {
 		  <h2>Account Deletion Confirmation</h2>
 		  <p>Your account has been successfully deleted from EscapeRoom.</p>
 		  <p>We're sorry to see you go. If you change your mind, you have 30 days to recover your account. after that you're always welcome to register again.</p>
-		  <p>To recover your account please click <a href="${process.env.FRONTEND_URL}/recover-account">here</a>.</p> 
+		  <p>To recover your account please click <a href="${securityConfig.frontendUrl}/recover-account">here</a>.</p>
 		  <p>Thank you for being a part of our community.</p> 
 		  <p>If you have any questions or concerns, please contact our support team.</p>
 		  <p>Best regards,<br>The EscapeRoom Team</p>

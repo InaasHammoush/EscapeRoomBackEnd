@@ -1,19 +1,8 @@
 // src/middleware/rateLimit.js
-// Einfacher In-Memory-Rate-Limiter (per IP oder benutzerdefiniertem Key).
+// Redis-backed Rate-Limiter mit In-Memory-Fallback fuer lokale Entwicklung
+// oder kurzzeitige Redis-Ausfaelle.
 
-const buckets = new Map();
-let cleanupCounter = 0;
-
-function cleanupExpiredBuckets(now) {
-  cleanupCounter += 1;
-  if (cleanupCounter % 200 !== 0) return;
-
-  for (const [key, bucket] of buckets.entries()) {
-    if (bucket.resetTime <= now) {
-      buckets.delete(key);
-    }
-  }
-}
+import { consumeRateLimit } from '../services/rateLimit.service.js';
 
 /**
  * @param {Object} opts
@@ -31,27 +20,24 @@ export function rateLimit({ windowMs, max, keyGenerator, name = 'default' }) {
     throw new Error('rateLimit max must be a positive number');
   }
 
-  return (req, res, next) => {
-    const now = Date.now();
-    cleanupExpiredBuckets(now);
-
+  return async (req, res, next) => {
     const rawKey = keyGenerator ? keyGenerator(req) : req.ip;
-    const key = `${name}:${rawKey || req.ip || 'global'}`;
+    const key = String(rawKey || req.ip || 'global');
 
-    let bucket = buckets.get(key);
-    if (!bucket || bucket.resetTime <= now) {
-      bucket = { count: 0, resetTime: now + windowMs };
-    }
+    const result = await consumeRateLimit({
+      namespace: name,
+      key,
+      windowMs,
+      max,
+    });
 
-    bucket.count += 1;
-    buckets.set(key, bucket);
+    res.set('X-RateLimit-Limit', String(result.limit));
+    res.set('X-RateLimit-Remaining', String(result.remaining));
+    res.set('X-RateLimit-Reset', String(Math.ceil(result.resetTime / 1000)));
+    res.set('X-RateLimit-Store', result.store);
 
-    res.set('X-RateLimit-Limit', String(max));
-    res.set('X-RateLimit-Remaining', String(Math.max(0, max - bucket.count)));
-    res.set('X-RateLimit-Reset', String(Math.ceil(bucket.resetTime / 1000)));
-
-    if (bucket.count > max) {
-      const retryAfterSec = Math.ceil((bucket.resetTime - now) / 1000);
+    if (result.exceeded) {
+      const retryAfterSec = Math.ceil(result.retryAfterMs / 1000);
       res.set('Retry-After', String(retryAfterSec));
       return res.status(429).json({
         error: 'TOO_MANY_REQUESTS',
