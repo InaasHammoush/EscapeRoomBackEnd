@@ -394,6 +394,8 @@ io.on('connection', (socket) => {
         console.log('INTERACT payload received:', payload);
       }
       const { roomId, actionId, objectId, canonicalObjectId, verb, data } = payload;
+      const roomBefore = rooms.get(roomId);
+      const wasCompleted = !!roomBefore?.completed;
       const result = rooms.applyAction(roomId, {
         actionId,
         playerId: socket.id,
@@ -413,6 +415,22 @@ io.on('connection', (socket) => {
       } else {
         // Delta an alle Clients im Raum senden
         io.to(roomId).emit('puzzle_update', { seq: result.seq, diff: result.diff });
+      }
+
+      if (room?.completed && !wasCompleted) {
+        const startedAt = room.startedAt ?? room.state?.public?.game?.startedAt ?? null;
+        const completedAt = room.completedAt ?? room.state?.public?.game?.endedAt ?? null;
+        const durationSeconds =
+          startedAt && completedAt
+            ? Math.max(0, Math.round((completedAt - startedAt) / 1000))
+            : null;
+        io.to(roomId).emit('room_completed', {
+          roomId: room.id,
+          mode: room.state?.public?.mode || 'coop',
+          startedAt,
+          completedAt,
+          durationSeconds,
+        });
       }
       cb?.({ ok: true, seq: result.seq });
     },
