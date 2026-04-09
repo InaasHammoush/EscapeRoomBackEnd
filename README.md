@@ -15,6 +15,7 @@ npm run dev
 ## Local Dev
 - `npm run dev` in the frontend expects the backend app to be reachable on `http://127.0.0.1:3000` by default.
 - Override the frontend proxy target with `VITE_PROXY_TARGET` if you explicitly want to proxy through Caddy instead.
+- In Docker Compose, the shared defaults publish to loopback only. If a machine or Compose implementation needs plain mappings instead, override `APP_PORT_MAPPING`, `REDIS_PORT_MAPPING`, or `POSTGRES_PORT_MAPPING` locally, for example `APP_PORT_MAPPING=3000:3000`.
 - If `ORIGIN` is unset, the backend now defaults to `http://localhost:5173` and `http://127.0.0.1:5173` in development.
 - If `FRONTEND_URL` is unset, development email links fall back to `http://localhost:5173`.
 - For plain local HTTP development, `COOKIE_SECURE` now defaults to `false` and `COOKIE_SAME_SITE` falls back to `lax`.
