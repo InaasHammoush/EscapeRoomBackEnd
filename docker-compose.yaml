@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      PORT: ${PORT:-3000}
+      PORT: 3000
       ORIGIN: ${ORIGIN:-http://localhost}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/escape}

@@ -78,6 +78,22 @@ test('Solo mode: chamber switching preserves room-local view and puzzle progress
   assert.deepEqual(live.state.public.alchEastSlidingLock.board, [1, 0, 2, 4, 8, 3, 7, 6, 5]);
 });
 
+test('Solo mode: corridor switch diff preserves running game timer', async () => {
+  const { rm, roomId, live } = await makeStartedSoloRoom();
+  assert.ok(live);
+
+  const startedAt = live.state.public?.game?.startedAt;
+  assert.equal(typeof startedAt, 'number');
+
+  live.state.public.corridorUnlocked = true;
+
+  const r = rm.switchChamber(roomId, 'corridor');
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.diff.activeChamber, 'corridor');
+  assert.equal(r.diff.game?.status, 'running');
+  assert.equal(r.diff.game?.startedAt, startedAt);
+});
+
 test('Solo mode: east door opens on first press after key insert', async () => {
   const { rm, roomId, live } = await makeStartedSoloRoom('alchemist', 'alchemist');
   assert.ok(live);
@@ -105,6 +121,7 @@ test('Solo mode: east door opens on first press after key insert', async () => {
 test('Solo mode: final plates can be pressed sequentially by one player', async () => {
   const { rm, roomId, live } = await makeStartedSoloRoom();
   assert.ok(live);
+  const startedAt = live.state.public?.game?.startedAt;
 
   live.state.public.door_seal = { openable: true };
   live.state.public.tictactoe_scroll = { solved: true };

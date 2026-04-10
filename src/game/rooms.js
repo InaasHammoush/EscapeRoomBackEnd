@@ -208,7 +208,7 @@ function buildPresentationState(publicState, fallbackRoomName = 'default') {
 }
 
 function presentationDiff(publicState) {
-  return {
+  const diff = {
     mode: publicState.mode,
     activeChamber: publicState.activeChamber,
     availableChambers: [...(publicState.availableChambers || [])],
@@ -217,6 +217,24 @@ function presentationDiff(publicState) {
     views: [...(publicState.views || [])],
     viewIndex: Number(publicState.viewIndex || 0),
   };
+
+  if (Object.prototype.hasOwnProperty.call(publicState, 'corridorUnlocked')) {
+    diff.corridorUnlocked = !!publicState.corridorUnlocked;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(publicState, 'corridorUnlockedAt')) {
+    diff.corridorUnlockedAt = publicState.corridorUnlockedAt ?? null;
+  }
+
+  if (publicState.game) {
+    diff.game = JSON.parse(JSON.stringify(publicState.game));
+  }
+
+  if (publicState.finalCorridor) {
+    diff.finalCorridor = JSON.parse(JSON.stringify(publicState.finalCorridor));
+  }
+
+  return diff;
 }
 
 export class RoomManager {
@@ -899,17 +917,30 @@ export class RoomManager {
 
     const finalDoorOpen = !!pub?.finalCorridor?.finalDoorOpen;
     const prevGame = pub.game || null;
+    const startedAt = prevGame?.startedAt || room?.startedAt || null;
 
     if (finalDoorOpen) {
       pub.game = {
         status: 'won',
+        startedAt,
         endedAt: prevGame?.endedAt || Date.now(),
       };
       return JSON.stringify(prevGame) !== JSON.stringify(pub.game);
     }
 
     if (!prevGame) {
-      pub.game = { status: 'running', endedAt: null };
+      pub.game = { status: 'running', startedAt, endedAt: null };
+      return true;
+    }
+
+    const nextGame = {
+      status: 'running',
+      startedAt,
+      endedAt: null,
+    };
+
+    if (JSON.stringify(prevGame) !== JSON.stringify(nextGame)) {
+      pub.game = nextGame;
       return true;
     }
 
@@ -1040,8 +1071,12 @@ export class RoomManager {
       roomName: data?.state?.roomType || 'default',
       epoch: Date.now(),
       seq: data.seq ?? 0,
-      started: data.started ?? false,
-      completed: data.completed ?? false,
+      started:
+        data.started ??
+        Boolean(Number(data?.state?.game?.startedAt || 0) > 0),
+      completed:
+        data.completed ??
+        String(data?.state?.game?.status || '').toLowerCase() === 'won',
       createdAt: Date.now(),
       startedAt: Number.isFinite(snapStartedAt) && snapStartedAt > 0 ? snapStartedAt : null,
       completedAt: Number.isFinite(snapEndedAt) && snapEndedAt > 0 ? snapEndedAt : null,
