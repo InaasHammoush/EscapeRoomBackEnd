@@ -45,6 +45,7 @@ export const schemas = {
     roomId: z.uuid(),
     name: nonControlText({ min: 1, max: 32, label: 'Name' }),
     role: z.string().min(1).max(32).optional(),
+    accessToken: nonControlText({ min: 1, max: 4096, label: 'Access-Token' }).optional(),
   }),
   Ready: z.object({
     roomId: z.uuid(),
