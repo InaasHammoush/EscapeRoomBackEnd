@@ -258,6 +258,7 @@ export class RoomManager {
     pointsOnComplete = 100,
     pointsReason = 'room_completed',
     statsEnabled = process.env.ROOM_STATS_ENABLED !== 'false',
+    resolvePlayerProfile = null,
   } = {}) {
     this.rooms = new Map(); // roomId -> Room
     this.redis = redis;
@@ -269,6 +270,9 @@ export class RoomManager {
     this.pointsOnComplete = pointsOnComplete;
     this.pointsReason = pointsReason;
     this.statsEnabled = !!statsEnabled;
+    this.resolvePlayerProfile = typeof resolvePlayerProfile === 'function'
+      ? resolvePlayerProfile
+      : null;
   }
 
   // ----------------------------------------------------------
@@ -1006,6 +1010,28 @@ export class RoomManager {
     );
   }
 
+  async _hydratePlayerProfiles(room) {
+    if (!this.resolvePlayerProfile || !room?.players?.size) {
+      return;
+    }
+
+    for (const [socketId, player] of room.players) {
+      if (player?.profileId) continue;
+
+      try {
+        const resolvedProfile = await this.resolvePlayerProfile(socketId, player, room);
+        if (resolvedProfile?.id) {
+          player.profileId = resolvedProfile.id;
+          if (resolvedProfile.username && !player.name) {
+            player.name = resolvedProfile.username;
+          }
+        }
+      } catch (err) {
+        console.warn(`[room:${room.id}] profile hydration failed for socket ${socketId}:`, err?.message || err);
+      }
+    }
+  }
+
   _runWithRoomStats(opName, run) {
     if (roomStatsUnavailableGlobally) return;
     getRoomStatsModule()
@@ -1178,6 +1204,17 @@ export class RoomManager {
           player.finishedAt = room.completedAt;
         }
       }
+
+      await this._hydratePlayerProfiles(room);
+
+      console.info(`[room:${room.id}] completion participants`, [...room.players.entries()].map(([socketId, player]) => ({
+        socketId,
+        name: player?.name ?? null,
+        profileId: player?.profileId ?? null,
+        role: player?.role ?? null,
+        joinedAt: player?.joinedAt ?? null,
+        finishedAt: player?.finishedAt ?? null,
+      })));
 
       // Raum- und Teilnehmer-Stats in die DB schreiben (nicht-blockierend)
       if (this.statsEnabled) {

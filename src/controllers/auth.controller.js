@@ -28,6 +28,13 @@ export async function login(req, res) {
     const payload = loginSchema.parse(req.body);
     const { accessToken, refreshToken, user } = await AuthService.loginUser(payload);
 
+    console.info('[auth:login] login succeeded', {
+      userId: user?.id ?? null,
+      username: user?.username ?? null,
+      issuedAccessToken: Boolean(accessToken),
+      issuedRefreshToken: Boolean(refreshToken),
+    });
+
     setRefreshTokenCookie(res, refreshToken);
     res.json({ accessToken, user });
   } catch (err) {

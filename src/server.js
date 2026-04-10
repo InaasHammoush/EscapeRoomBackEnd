@@ -11,6 +11,7 @@ import {
   buildCorsOptions,
   describeSecurityConfiguration,
   isOriginAllowed,
+  readRefreshTokenCookie,
   securityConfig,
   validateSecurityConfiguration
 } from './config/security.js';
@@ -32,6 +33,9 @@ import {
   extractBearerToken,
   resolveAuthorizedUserFromAccessToken
 } from './services/accessTokenAuth.service.js';
+import { assertActiveRefreshToken, assertTokenNotRevoked } from './services/tokenSession.service.js';
+import { verifyRefreshToken } from './util/token.js';
+import * as userModel from './models/user.model.js';
 
 validateSecurityConfiguration();
 
@@ -74,6 +78,47 @@ function logStartupDiagnostics() {
   );
 }
 
+function parseCookieHeader(headerValue) {
+  const cookies = {};
+  if (typeof headerValue !== 'string' || headerValue.trim() === '') {
+    return cookies;
+  }
+
+  for (const entry of headerValue.split(';')) {
+    const [rawName, ...rawValueParts] = entry.split('=');
+    const name = rawName?.trim();
+    if (!name) continue;
+    const value = rawValueParts.join('=').trim();
+    cookies[name] = decodeURIComponent(value || '');
+  }
+
+  return cookies;
+}
+
+async function resolveAuthorizedUserFromRefreshCookie(socket) {
+  const cookieHeader = socket.handshake?.headers?.cookie;
+  const refreshToken = readRefreshTokenCookie({
+    cookies: parseCookieHeader(cookieHeader),
+  });
+
+  if (!refreshToken) {
+    return null;
+  }
+
+  const payload = verifyRefreshToken(refreshToken);
+  await assertTokenNotRevoked(payload);
+  await assertActiveRefreshToken(payload);
+
+  const user = await userModel.findActiveUserById(payload.id);
+  if (!user || !user.email_verified) {
+    throw new Error('ACCOUNT_NOT_AUTHORIZED');
+  }
+
+  const boundUser = { id: user.id, username: user.username };
+  socket.data.user = boundUser;
+  return boundUser;
+}
+
 async function bindSocketUser(socket, token) {
   const user = await resolveAuthorizedUserFromAccessToken(token);
   const boundUser = { id: user.id, username: user.username };
@@ -93,11 +138,24 @@ async function resolveSocketUser(socket, accessToken) {
       ? accessToken.trim()
       : null;
 
-  if (!token) {
-    return null;
+  if (token) {
+    try {
+      return await bindSocketUser(socket, token);
+    } catch (err) {
+      if (securityConfig.socketDebugLogsEnabled) {
+        console.warn('Socket access-token auth rejected:', err.message);
+      }
+    }
   }
 
-  return bindSocketUser(socket, token);
+  try {
+    return await resolveAuthorizedUserFromRefreshCookie(socket);
+  } catch (err) {
+    if (securityConfig.socketDebugLogsEnabled) {
+      console.warn('Socket refresh-cookie auth rejected:', err.message);
+    }
+    return null;
+  }
 }
 
 const app = express();
@@ -244,7 +302,15 @@ await jsonStore.load();
 const rooms = new RoomManager({
   redis: redisPub,
   snapshotTTL: 3600,
-  store: jsonStore
+  store: jsonStore,
+  resolvePlayerProfile: async (socketId) => {
+    const liveSocket = io.sockets.sockets.get(socketId);
+    if (liveSocket?.data?.user?.id && liveSocket?.data?.user?.username) {
+      return liveSocket.data.user;
+    }
+
+    return null;
+  },
 });
 
 rooms.startAutosave(30000);
@@ -276,6 +342,17 @@ io.on('connection', (socket) => {
       const displayName = user?.username || name;   // JWT-Name schlägt manuelles Feld
       const profileId = user?.id || null;           // Für Stats/room_participants
       const normalizedRole = normalizeRole(role) || socket.data?.coopRole || null;
+
+      console.info('[socket:join_room] resolved player', {
+        socketId: socket.id,
+        roomId,
+        hadInlineAccessToken: Boolean(typeof accessToken === 'string' && accessToken.trim()),
+        boundSocketUserId: socket.data?.user?.id ?? null,
+        resolvedUserId: user?.id ?? null,
+        resolvedUsername: user?.username ?? null,
+        profileId,
+        role: normalizedRole,
+      });
 
       // joinRoom ist async, weil es ggf. einen Snapshot aus Redis lädt
       const room = await rooms.joinRoom(roomId, socket.id, displayName, profileId, normalizedRole);

@@ -29,6 +29,12 @@ router.post('/refresh', refreshLimiter, async (req, res) => {
   try {
     const { accessToken, refreshToken, user } =
       await AuthService.refreshUserSession(token);
+    console.info('[auth:refresh] refresh succeeded', {
+      userId: user?.id ?? null,
+      username: user?.username ?? null,
+      issuedAccessToken: Boolean(accessToken),
+      rotatedRefreshToken: Boolean(refreshToken),
+    });
     if (refreshToken) {
       setRefreshTokenCookie(res, refreshToken);
     }
@@ -37,7 +43,10 @@ router.post('/refresh', refreshLimiter, async (req, res) => {
       accessToken,
       user,
     });
-  } catch {
+  } catch (err) {
+    console.warn('[auth:refresh] refresh failed', {
+      error: err?.message ?? 'unknown',
+    });
     clearRefreshTokenCookie(res);
     return res.status(403).json({ error: 'Invalid refresh token' });
   }
