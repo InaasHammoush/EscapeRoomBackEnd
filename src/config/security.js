@@ -7,6 +7,7 @@ const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
 const DEFAULT_HSTS_MAX_AGE = 60 * 60 * 24 * 180;
 const DEFAULT_SOCKET_BUFFER_SIZE = 64 * 1024;
 const DEFAULT_REFRESH_COOKIE_NAME = 'refreshToken';
+const DEFAULT_REFRESH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_DEV_ALLOWED_ORIGINS = Object.freeze([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -31,6 +32,14 @@ function normalizeSameSite(value, fallback = 'strict') {
   return ['strict', 'lax', 'none'].includes(normalized) ? normalized : fallback;
 }
 
+function resolveCookieSameSite(value, cookieSecure) {
+  if (value != null && String(value).trim() !== '') {
+    return normalizeSameSite(value, cookieSecure ? 'strict' : 'lax');
+  }
+
+  return cookieSecure ? 'strict' : 'lax';
+}
+
 function normalizeUrl(value) {
   const normalized = String(value ?? '').trim().replace(/\/+$/, '');
   return normalized || null;
@@ -46,6 +55,34 @@ function parseOrigins(value) {
       .split(',')
       .map(origin => normalizeUrl(origin))
   );
+}
+
+function getOriginHost(origin) {
+  try {
+    return new URL(origin).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function hasLoopbackHostMix(origins) {
+  const hosts = new Set(origins.map(getOriginHost).filter(Boolean));
+  return hosts.has('localhost') && hosts.has('127.0.0.1');
+}
+
+function decodeJwtPayload(token) {
+  const payloadPart = String(token ?? '').split('.')[1];
+  if (!payloadPart) return null;
+
+  try {
+    const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedLength = Math.ceil(normalized.length / 4) * 4;
+    const padded = normalized.padEnd(paddedLength, '=');
+    const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+    return payload && typeof payload === 'object' ? payload : null;
+  } catch {
+    return null;
+  }
 }
 
 function resolveTrustProxy(value, isProduction) {
@@ -96,10 +133,7 @@ const allowedOrigins = Object.freeze(resolveAllowedOrigins(process.env.ORIGIN, i
 const frontendUrl = resolveFrontendUrl(process.env.FRONTEND_URL, isProduction, allowedOrigins);
 const cookieDomain = process.env.COOKIE_DOMAIN?.trim() || null;
 const cookieSecure = parseBoolean(process.env.COOKIE_SECURE, isProduction);
-const cookieSameSite = normalizeSameSite(
-  process.env.COOKIE_SAME_SITE,
-  isProduction ? 'strict' : 'lax'
-);
+const cookieSameSite = resolveCookieSameSite(process.env.COOKIE_SAME_SITE, cookieSecure);
 const refreshCookieName =
   cookieSecure && !cookieDomain
     ? '__Host-refreshToken'
@@ -114,7 +148,7 @@ const refreshCookieOptions = Object.freeze({
   secure: cookieSecure,
   sameSite: cookieSameSite,
   path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  maxAge: DEFAULT_REFRESH_COOKIE_MAX_AGE_MS,
   ...(cookieDomain ? { domain: cookieDomain } : {}),
 });
 
@@ -211,6 +245,18 @@ export function validateSecurityConfiguration() {
   if (cookieSameSite === 'none' && !cookieSecure) {
     throw new Error('COOKIE_SAME_SITE=none requires COOKIE_SECURE=true');
   }
+
+  if (!process.env.COOKIE_SAME_SITE && !cookieSecure) {
+    console.warn(
+      'COOKIE_SAME_SITE is not set; defaulting the refresh cookie to SameSite=lax because COOKIE_SECURE=false.'
+    );
+  }
+
+  if (hasLoopbackHostMix(securityConfig.allowedOrigins)) {
+    console.warn(
+      'ORIGIN includes both localhost and 127.0.0.1. Refresh cookies are host-specific; prefer one canonical local host to avoid inconsistent sessions after reload.'
+    );
+  }
 }
 
 export function describeSecurityConfiguration() {
@@ -256,10 +302,18 @@ export function buildCorsOptions() {
 }
 
 export function setRefreshTokenCookie(res, token) {
+  const exp = Number(decodeJwtPayload(token)?.exp);
+  const maxAge = Number.isFinite(exp) && exp > 0
+    ? Math.max(0, exp * 1000 - Date.now())
+    : securityConfig.refreshCookieOptions.maxAge;
+
   res.cookie(
     securityConfig.refreshCookieName,
     token,
-    securityConfig.refreshCookieOptions
+    {
+      ...securityConfig.refreshCookieOptions,
+      maxAge,
+    }
   );
 }
 
