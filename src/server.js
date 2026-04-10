@@ -363,6 +363,36 @@ io.on('connection', (socket) => {
     { rateLimit: { windowMs: 30_000, max: 10 } }
   );
 
+  // Intro dismissed – Timer tatsächlich starten
+  socket.on('intro:dismissed', ({ roomId }) => {
+    if (!roomId) return;
+    try {
+      const room = rooms.get(roomId);
+      if (room && room.started && !room.timerStarted) {
+        rooms.startTimer(roomId);
+        // Broadcast updated snapshots to all players in the room
+        const mode = room?.state?.public?.mode || 'coop';
+        if (mode === 'coop') {
+          for (const [sid] of room.players) {
+            const snap = rooms.snapshotFor(roomId, sid);
+            if (!snap) continue;
+            io.to(sid).emit('state:snapshot', { snapshot: snap });
+          }
+        } else {
+          // Solo mode: broadcast full snapshot to the room
+          const snap = rooms.snapshotFor(roomId, socket.id);
+          if (snap) {
+            io.to(roomId).emit('state:snapshot', { snapshot: snap });
+          }
+        }
+      }
+    } catch (e) {
+      if (securityConfig.socketDebugLogsEnabled) {
+        console.error('intro:dismissed failed:', e);
+      }
+    }
+  });
+
   onSafe(
     socket, 
     'intent:turn', 
@@ -394,6 +424,8 @@ io.on('connection', (socket) => {
         console.log('INTERACT payload received:', payload);
       }
       const { roomId, actionId, objectId, canonicalObjectId, verb, data } = payload;
+      const roomBefore = rooms.get(roomId);
+      const wasCompleted = !!roomBefore?.completed;
       const result = rooms.applyAction(roomId, {
         actionId,
         playerId: socket.id,
@@ -413,6 +445,22 @@ io.on('connection', (socket) => {
       } else {
         // Delta an alle Clients im Raum senden
         io.to(roomId).emit('puzzle_update', { seq: result.seq, diff: result.diff });
+      }
+
+      if (room?.completed && !wasCompleted) {
+        const startedAt = room.startedAt ?? room.state?.public?.game?.startedAt ?? null;
+        const completedAt = room.completedAt ?? room.state?.public?.game?.endedAt ?? null;
+        const durationSeconds =
+          startedAt && completedAt
+            ? Math.max(0, Math.round((completedAt - startedAt) / 1000))
+            : null;
+        io.to(roomId).emit('room_completed', {
+          roomId: room.id,
+          mode: room.state?.public?.mode || 'coop',
+          startedAt,
+          completedAt,
+          durationSeconds,
+        });
       }
       cb?.({ ok: true, seq: result.seq });
     },

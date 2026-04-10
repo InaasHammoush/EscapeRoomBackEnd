@@ -148,5 +148,11 @@ test('Solo mode: final plates can be pressed sequentially by one player', async 
   assert.equal(!!live.state.public.finalCorridor?.finalDoorOpen, true);
   assert.equal(!!live.state.public.finalCorridor?.solved, true);
   assert.equal(live.state.public?.game?.status, 'won');
-  assert.equal(live.state.public?.game?.startedAt, startedAt);
+  assert.equal(live.completed, true);
+  assert.ok(live.completedAt, 'completedAt should be set');
+  assert.equal(
+    live.completedAt,
+    live.state.public?.game?.endedAt,
+    'completedAt should match game endedAt when the final door opens'
+  );
 });

@@ -306,6 +306,7 @@ export class RoomManager {
       epoch: Date.now(),
       seq: 0,
       started: false,
+      timerStarted: false,
       completed: false,
       createdAt: Date.now(),
       startedAt: null,
@@ -485,7 +486,7 @@ export class RoomManager {
     return [...room.players.values()].every((p) => p.ready);
   }
 
-  /** Spiel starten (einmalig) */
+  /** Spiel starten (einmalig) – setzt noch NICHT den Timer */
   start(id) {
     const room = this.get(id);
     if (!room) throw new Error('ROOM_NOT_FOUND');
@@ -494,22 +495,35 @@ export class RoomManager {
       ensureInventory(room);
 
       room.started = true;
-      room.startedAt = Date.now();
+      // NB: startedAt bleibt null bis intro:dismissed event kommt
       if (!room.state.public.game) {
-        room.state.public.game = { status: 'running', startedAt: room.startedAt, endedAt: null };
-      } else {
-        room.state.public.game.status = 'running';
-        room.state.public.game.startedAt = room.state.public.game.startedAt || room.startedAt;
-        room.state.public.game.endedAt = null;
+        room.state.public.game = { status: 'running', startedAt: null, endedAt: null };
       }
       this._touchSeq(room);
       this._saveSnapshot(id).catch(() => {});
       this._persistLocal(id);
+    }
+    return room;
+  }
 
-      // Nicht-blockierend in die DB schreiben
-      if (this.statsEnabled) {
-        this._recordRoomStarted(room);
-      }
+  /** Timer tatsächlich starten (nach Intro) */
+  startTimer(id) {
+    const room = this.get(id);
+    if (!room) throw new Error('ROOM_NOT_FOUND');
+    if (room.timerStarted) return room; // Already started
+
+    room.timerStarted = true;
+    room.startedAt = Date.now();
+    if (room.state.public.game) {
+      room.state.public.game.startedAt = room.startedAt;
+    }
+    this._touchSeq(room);
+    this._saveSnapshot(id).catch(() => {});
+    this._persistLocal(id);
+
+    // Nicht-blockierend in die DB schreiben
+    if (this.statsEnabled) {
+      this._recordRoomStarted(room);
     }
     return room;
   }
@@ -1048,6 +1062,10 @@ export class RoomManager {
       data?.state?.roomType || 'default'
     );
 
+    const snapGame = data?.state?.game || {};
+    const snapStartedAt = Number(snapGame?.startedAt || 0);
+    const snapEndedAt = Number(snapGame?.endedAt || 0);
+
     const room = {
       id,
       roomName: data?.state?.roomType || 'default',
@@ -1060,8 +1078,8 @@ export class RoomManager {
         data.completed ??
         String(data?.state?.game?.status || '').toLowerCase() === 'won',
       createdAt: Date.now(),
-      startedAt: Number(data?.state?.game?.startedAt || 0) || null,
-      completedAt: Number(data?.state?.game?.endedAt || 0) || null,
+      startedAt: Number.isFinite(snapStartedAt) && snapStartedAt > 0 ? snapStartedAt : null,
+      completedAt: Number.isFinite(snapEndedAt) && snapEndedAt > 0 ? snapEndedAt : null,
       players: new Map(), // wird bei Rejoin neu aufgebaut
       state: {
         public: publicState,
@@ -1136,8 +1154,20 @@ export class RoomManager {
     if (room.completed) return;
 
     if (this.completionPredicate(room.state)) {
+      if (!room.startedAt) {
+        const startedAtFromGame = Number(room.state?.public?.game?.startedAt || 0);
+        if (Number.isFinite(startedAtFromGame) && startedAtFromGame > 0) {
+          room.startedAt = startedAtFromGame;
+        }
+      }
+
+      const endedAtFromGame = Number(room.state?.public?.game?.endedAt || 0);
+      room.completedAt =
+        Number.isFinite(endedAtFromGame) && endedAtFromGame > 0
+          ? endedAtFromGame
+          : Date.now();
+
       room.completed = true;
-      room.completedAt = Date.now();
       this._touchSeq(room);
       await this._saveSnapshot(room.id);
       this._persistLocal(room.id);

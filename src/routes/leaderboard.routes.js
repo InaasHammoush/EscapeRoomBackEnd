@@ -20,18 +20,16 @@ router.get('/time', async (req, res) => {
     const { rows } = await db.query(
       `
       SELECT
-        u.id          AS user_id,
-        u.username    AS username,
-        COUNT(rp.id)  AS completed_runs,
-        MIN(rp.escape_time_seconds) AS best_time,
-        AVG(rp.escape_time_seconds)::float AS avg_time
+        rp.id         AS run_id,
+        COALESCE(u.username, 'Guest') AS username,
+        rp.escape_time_seconds AS escape_time_seconds,
+        rp.completed_at AS completed_at
       FROM room_participants rp
-      JOIN users u
+      LEFT JOIN users u
         ON u.id = rp.user_id
       WHERE rp.escape_time_seconds IS NOT NULL
-      GROUP BY u.id, u.username
-      ORDER BY best_time ASC
-      LIMIT 10
+      ORDER BY rp.escape_time_seconds ASC
+      LIMIT 50
       `
     );
 
