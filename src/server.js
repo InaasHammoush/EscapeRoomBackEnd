@@ -24,13 +24,14 @@ import { JsonStore } from './store/jsonStore.js';
 import authRoutes from './routes/auth.routes.js';
 import tokenRoutes from './routes/token.routes.js';
 import { onSafe, schemas } from './util/validation.js';
-import { verifyAccessToken } from './util/token.js';
 import { RoomManager } from './game/rooms.js';
 import { authenticateToken } from './middleware/auth.middleware.js';
 import { applyHttpSecurity } from './middleware/httpSecurity.js';
 import leaderboardRoutes from './routes/leaderboard.routes.js';
-import { assertTokenNotRevoked } from './services/tokenSession.service.js';
-import * as userModel from './models/user.model.js';
+import {
+  extractBearerToken,
+  resolveAuthorizedUserFromAccessToken
+} from './services/accessTokenAuth.service.js';
 
 validateSecurityConfiguration();
 
@@ -71,6 +72,32 @@ function logStartupDiagnostics() {
   console.info(
     `[startup] Redis: url=${redisDiagnostics.url}, tls=${yesNo(redisDiagnostics.tlsEnabled)}, rejectUnauthorized=${yesNo(redisDiagnostics.tlsRejectUnauthorized)}, caConfigured=${yesNo(redisDiagnostics.tlsCaConfigured)}, keyPrefix=${redisDiagnostics.keyPrefix}`
   );
+}
+
+async function bindSocketUser(socket, token) {
+  const user = await resolveAuthorizedUserFromAccessToken(token);
+  const boundUser = { id: user.id, username: user.username };
+  socket.data.user = boundUser;
+  return boundUser;
+}
+
+async function resolveSocketUser(socket, accessToken) {
+  if (socket.data.user?.id && socket.data.user?.username) {
+    return socket.data.user;
+  }
+
+  // Allows an already connected anonymous socket to bind a freshly obtained
+  // access token right before joining a room, without forcing a reconnect.
+  const token =
+    typeof accessToken === 'string' && accessToken.trim()
+      ? accessToken.trim()
+      : null;
+
+  if (!token) {
+    return null;
+  }
+
+  return bindSocketUser(socket, token);
 }
 
 const app = express();
@@ -187,29 +214,14 @@ io.use(async (socket, next) => {
   const auth = socket.handshake.auth || {};
   const headers = socket.handshake.headers || {};
 
-  let token = null;
-
-  if (auth.token) {
-    token = auth.token;
-  } else if (
-    typeof headers.authorization === 'string' &&
-    headers.authorization.startsWith('Bearer ')
-  ) {
-    token = headers.authorization.substring('Bearer '.length);
-  }
+  const token = auth.token || extractBearerToken(headers.authorization);
 
   if (!token) {
     return next();
   }
 
   try {
-    const decoded = verifyAccessToken(token);
-    await assertTokenNotRevoked(decoded);
-    const user = await userModel.findActiveUserById(decoded.id);
-
-    if (user && user.email_verified) {
-      socket.data.user = { id: user.id, username: user.username };
-    }
+    await bindSocketUser(socket, token);
   } catch (err) {
     if (securityConfig.socketDebugLogsEnabled) {
       console.warn('Socket JWT rejected:', err.message);
@@ -258,9 +270,9 @@ io.on('connection', (socket) => {
   onSafe(socket, 
     'join_room', 
     schemas.JoinRoom, 
-    async ({ roomId, name, role }, cb) => {
+    async ({ roomId, name, role, accessToken }, cb) => {
     try {
-      const user = socket.data.user;
+      const user = await resolveSocketUser(socket, accessToken);
       const displayName = user?.username || name;   // JWT-Name schlägt manuelles Feld
       const profileId = user?.id || null;           // Für Stats/room_participants
       const normalizedRole = normalizeRole(role) || socket.data?.coopRole || null;

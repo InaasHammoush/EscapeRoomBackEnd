@@ -1,14 +1,7 @@
-import * as userModel from '../models/user.model.js';
-import { verifyAccessToken } from '../util/token.js';
-import { assertTokenNotRevoked } from '../services/tokenSession.service.js';
-
-function extractBearerToken(authHeader) {
-  if (typeof authHeader !== 'string') return null;
-  if (!authHeader.startsWith('Bearer ')) return null;
-
-  const token = authHeader.slice('Bearer '.length).trim();
-  return token || null;
-}
+import {
+  extractBearerToken,
+  resolveAuthorizedUserFromAccessToken
+} from '../services/accessTokenAuth.service.js';
 
 /**
  * Middleware to verify JWT access tokens.
@@ -21,13 +14,7 @@ export async function authenticateToken(req, res, next) {
       return res.status(401).json({ error: 'Missing Authorization header' });
     }
 
-    const payload = verifyAccessToken(token);
-    await assertTokenNotRevoked(payload);
-    const user = await userModel.findActiveUserById(payload.id);
-
-    if (!user || !user.email_verified) {
-      return res.status(403).json({ error: 'Account is not authorized' });
-    }
+    const user = await resolveAuthorizedUserFromAccessToken(token);
 
     req.user = {
       id: user.id,
@@ -55,13 +42,7 @@ export async function isAuthenticated(req, res, next) {
   }
 
   try {
-    const payload = verifyAccessToken(token);
-    await assertTokenNotRevoked(payload);
-    const user = await userModel.findActiveUserById(payload.id);
-
-    if (!user || !user.email_verified) {
-      return next();
-    }
+    await resolveAuthorizedUserFromAccessToken(token);
 
     return res.status(403).json({
       message: 'Already authenticated.'
