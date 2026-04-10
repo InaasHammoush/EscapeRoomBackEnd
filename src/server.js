@@ -363,6 +363,36 @@ io.on('connection', (socket) => {
     { rateLimit: { windowMs: 30_000, max: 10 } }
   );
 
+  // Intro dismissed – Timer tatsächlich starten
+  socket.on('intro:dismissed', ({ roomId }) => {
+    if (!roomId) return;
+    try {
+      const room = rooms.get(roomId);
+      if (room && room.started && !room.timerStarted) {
+        rooms.startTimer(roomId);
+        // Broadcast updated snapshots to all players in the room
+        const mode = room?.state?.public?.mode || 'coop';
+        if (mode === 'coop') {
+          for (const [sid] of room.players) {
+            const snap = rooms.snapshotFor(roomId, sid);
+            if (!snap) continue;
+            io.to(sid).emit('state:snapshot', { snapshot: snap });
+          }
+        } else {
+          // Solo mode: broadcast full snapshot to the room
+          const snap = rooms.snapshotFor(roomId, socket.id);
+          if (snap) {
+            io.to(roomId).emit('state:snapshot', { snapshot: snap });
+          }
+        }
+      }
+    } catch (e) {
+      if (securityConfig.socketDebugLogsEnabled) {
+        console.error('intro:dismissed failed:', e);
+      }
+    }
+  });
+
   onSafe(
     socket, 
     'intent:turn', 
