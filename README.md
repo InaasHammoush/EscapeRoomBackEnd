@@ -17,6 +17,7 @@ npm run dev
 - Override the frontend proxy target with `VITE_PROXY_TARGET` if you explicitly want to proxy through Caddy instead.
 - In Docker Compose, the shared defaults publish to loopback only. If a machine or Compose implementation needs plain mappings instead, override `APP_PORT_MAPPING`, `REDIS_PORT_MAPPING`, or `POSTGRES_PORT_MAPPING` locally, for example `APP_PORT_MAPPING=3000:3000`.
 - If `ORIGIN` is unset, the backend now defaults to `http://localhost:5173` and `http://127.0.0.1:5173` in development.
+- Prefer one canonical local host (`localhost` or `127.0.0.1`) per machine/session. Refresh cookies are host-specific, so mixing both can look like a random logout after reload.
 - If `FRONTEND_URL` is unset, development email links fall back to `http://localhost:5173`.
 - For plain local HTTP development, `COOKIE_SECURE` now defaults to `false` and `COOKIE_SAME_SITE` falls back to `lax`.
 - If your managed Postgres connection fails with `self-signed certificate in certificate chain`, keep `DATABASE_SSL_ENABLED=true` and set `DATABASE_SSL_REJECT_UNAUTHORIZED=false` locally unless you have mounted the provider CA via `DATABASE_CA_CERT_PATH` or `DATABASE_CA_CERT`.
