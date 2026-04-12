@@ -29,7 +29,7 @@ const emailService = {
       const msg = {
         to: email,
         from: {
-          email: process.env.FROM_EMAIL || 'noreply@escaperoom.com',
+          email: process.env.FROM_EMAIL || 'escaperoom852@gmail.com',
           name: 'EscapeRoom'
         },
         subject,
