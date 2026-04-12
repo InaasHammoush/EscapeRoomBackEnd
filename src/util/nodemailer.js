@@ -157,13 +157,13 @@ const emailService = {
 				email,
 				"Verify Your EscapeRoom Account",
 				content,
-				errorCode,
-				errorResponse,
-				stack,
 			);
 		} catch (error) {
 			log.error(`Failed to send verification email to ${email}`, {
 				error: error.message,
+				errorCode: error.code,
+				errorResponse: error.response,
+				stack: error.stack,
 			});
 			throw error; // Re-throw to handle in controller
 		}
