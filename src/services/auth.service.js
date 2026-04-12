@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import * as userModel from '../models/user.model.js';
 import * as passwordResetModel from '../models/passwordReset.model.js';
 import emailService from '../util/nodemailer.js';
+import { createPendingUserAndSendVerificationEmail } from './registrationFlow.service.js';
 import { verifyRefreshToken } from '../util/token.js';
 import {
   issueTokensForUser,
@@ -27,16 +28,21 @@ export async function registerUser({ username, email, password }) {
   const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const { token, hashedToken } = generateVerificationToken();
 
-  const user = await userModel.createUser(
-    username,
-    normalizedEmail,
-    hashedPassword,
-    hashedToken,
-    new Date(Date.now() + 3600000 * 24)
-  );
-
-  await emailService.sendVerificationEmail(normalizedEmail, token);
-  return user;
+  return createPendingUserAndSendVerificationEmail({
+    createUser: () =>
+      userModel.createUser(
+        username,
+        normalizedEmail,
+        hashedPassword,
+        hashedToken,
+        new Date(Date.now() + 3600000 * 24)
+      ),
+    deletePendingUser: userId => userModel.deletePendingUserById(userId),
+    sendVerificationEmail: (targetEmail, verificationToken) =>
+      emailService.sendVerificationEmail(targetEmail, verificationToken),
+    email: normalizedEmail,
+    verificationToken: token,
+  });
 }
 
 export async function loginUser({ email, password }) {

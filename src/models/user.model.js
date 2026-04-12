@@ -9,6 +9,19 @@ export async function createUser(username, email, passwordHash, emailVerificatio
   return result.rows[0];
 }
 
+export async function deletePendingUserById(userId) {
+  const result = await db.query(
+    `DELETE FROM users
+     WHERE id = $1
+       AND email_verified = FALSE
+       AND deleted_at IS NULL
+     RETURNING id`,
+    [userId]
+  );
+
+  return result.rowCount > 0;
+}
+
 export async function findUserByEmail(email) {
   const result = await db.query(
     `SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL`,
