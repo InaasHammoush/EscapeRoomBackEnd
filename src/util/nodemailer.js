@@ -38,11 +38,18 @@ const transporter = nodemailer.createTransport({
 transporter.verify((error) => {
   if (error) {
     log.error("Email transport verification failed", {
-      error: error,
+      error: error.message,
+      errorCode: error.code,
+      errorResponse: error.response,
       service: "Gmail",
+      hasGmailUser: !!process.env.GMAIL_USER,
+      hasGmailPassword: !!process.env.GMAIL_PASSWORD,
+      gmailUserValue: process.env.GMAIL_USER?.substring(0, 10) + '***',
     });
   } else {
-    log.info("Email service ready to send messages");
+    log.info("Email service ready to send messages", {
+      gmailUser: process.env.GMAIL_USER,
+    });
   }
 });
 
@@ -106,8 +113,12 @@ const emailService = {
 		} catch (error) {
 			log.error(`Error sending email to ${email}`, {
 				error: error.message,
+				errorCode: error.code,
+				errorResponse: error.response,
 				stack: error.stack,
 				subject,
+				hasGmailUser: !!process.env.GMAIL_USER,
+				hasGmailPassword: !!process.env.GMAIL_PASSWORD,
 			});
 
 			throw error; // Re-throw to handle in calling function
@@ -146,6 +157,9 @@ const emailService = {
 				email,
 				"Verify Your EscapeRoom Account",
 				content,
+				errorCode: error.code,
+				errorResponse: error.response,
+				stack: error.stack,
 			);
 		} catch (error) {
 			log.error(`Failed to send verification email to ${email}`, {
