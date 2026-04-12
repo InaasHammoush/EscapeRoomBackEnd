@@ -4,6 +4,14 @@ This repository contains the backend for Arcane Descent, a browser-based escape 
 
 The overall goal of this service is not only to make the game run, but to keep it predictable. Puzzle progression, room state, session handling, validation, and persistence all live on the server so the frontend can stay focused on presentation and interaction.
 
+## Live Deployment
+
+The project is also deployed publicly at:
+
+`https://arcanedescent.vercel.app`
+
+This allows the game to be played online without running the local stack. The local backend setup in this repository remains relevant for development, debugging, testing, and deployment work.
+
 ## What This Backend Is Responsible For
 
 - user registration, login, logout, and token refresh
