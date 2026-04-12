@@ -113,6 +113,35 @@ export const resetPasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+function uniqueMessages(messages) {
+  return [...new Set(messages.filter(Boolean))];
+}
+
+export function isValidationError(err) {
+  return err instanceof z.ZodError || err?.name === 'ZodError' || Array.isArray(err?.issues);
+}
+
+export function getValidationErrorDetails(err) {
+  return isValidationError(err) && Array.isArray(err?.issues) ? err.issues : [];
+}
+
+export function formatValidationErrorMessage(err, fallback = 'Ungueltige Eingabe') {
+  const messages = uniqueMessages(
+    getValidationErrorDetails(err)
+      .map(issue => (typeof issue?.message === 'string' ? issue.message.trim() : ''))
+  );
+
+  if (messages.length > 0) {
+    return messages.join('\n');
+  }
+
+  if (typeof err?.message === 'string' && err.message.trim()) {
+    return err.message.trim();
+  }
+
+  return fallback;
+}
+
 async function checkSocketRateLimit(socket, event, { windowMs, max }) {
   const result = await consumeRateLimit({
     namespace: `socket:${event}`,

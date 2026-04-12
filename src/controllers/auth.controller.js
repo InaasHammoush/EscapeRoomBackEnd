@@ -5,7 +5,10 @@ import {
   changeEmailSchema,
   emailSchema,
   changePasswordSchema,
-  resetPasswordSchema
+  resetPasswordSchema,
+  formatValidationErrorMessage,
+  getValidationErrorDetails,
+  isValidationError
 } from '../util/validation.js';
 import {
   clearRefreshTokenCookie,
@@ -13,13 +16,21 @@ import {
   setRefreshTokenCookie
 } from '../config/security.js';
 
+function errorPayload(err, fallback = 'Request failed', key = 'message') {
+  const details = getValidationErrorDetails(err);
+  return {
+    [key]: formatValidationErrorMessage(err, fallback),
+    ...(details.length > 0 ? { details } : {}),
+  };
+}
+
 export async function register(req, res) {
   try {
     const payload = registerSchema.parse(req.body);
     const user = await AuthService.registerUser(payload);
     res.status(201).json({ success: true, user });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'Registrierung fehlgeschlagen') });
   }
 }
 
@@ -31,7 +42,8 @@ export async function login(req, res) {
     setRefreshTokenCookie(res, refreshToken);
     res.json({ accessToken, user });
   } catch (err) {
-    res.status(401).json({ error: err.message });
+    const status = isValidationError(err) ? 400 : 401;
+    res.status(status).json(errorPayload(err, 'Login fehlgeschlagen', 'error'));
   }
 }
 
@@ -42,7 +54,7 @@ export async function logout(req, res) {
     clearRefreshTokenCookie(res);
     res.json({ message: 'Logged out successfully' });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'Logout fehlgeschlagen') });
   }
 }
 
@@ -52,7 +64,7 @@ export async function verifyEmail(req, res) {
     await AuthService.verifyEmailToken(token);
     res.json({ success: true, message: 'Email verified successfully' });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'E-Mail-Verifizierung fehlgeschlagen') });
   }
 }
 
@@ -65,7 +77,7 @@ export async function changePassword(req, res) {
     clearRefreshTokenCookie(res);
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'Passwort konnte nicht geaendert werden') });
   }
 }
 
@@ -78,7 +90,7 @@ export async function resetPasswordRequest(req, res) {
       message: 'Password reset email sent if the email is registered'
     });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'Reset-E-Mail konnte nicht gesendet werden') });
   }
 }
 
@@ -91,7 +103,7 @@ export async function resetPassword(req, res) {
     clearRefreshTokenCookie(res);
     res.json({ success: true, message: 'Password has been reset successfully' });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'Passwort konnte nicht zurueckgesetzt werden') });
   }
 }
 
@@ -108,7 +120,7 @@ export async function changeEmailAddress(req, res) {
       message: 'Email change initiated. Please verify your new email address.'
     });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'E-Mail-Adresse konnte nicht geaendert werden') });
   }
 }
 
@@ -119,7 +131,7 @@ export async function deleteAccount(req, res) {
     clearRefreshTokenCookie(res);
     res.json({ success: true, message: 'Account deleted successfully' });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'Account konnte nicht geloescht werden') });
   }
 }
 
@@ -134,6 +146,6 @@ export async function recoverAccount(req, res) {
       message: 'If the account is eligible for recovery, it is now available again.'
     });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, ...errorPayload(err, 'Account-Wiederherstellung fehlgeschlagen') });
   }
 }
