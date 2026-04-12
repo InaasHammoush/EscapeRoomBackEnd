@@ -6,8 +6,11 @@
 import nodemailer from "nodemailer";
 import { securityConfig } from "../config/security.js";
 import log from "./log.js";
+import dns from "dns";
 
-// TODO: Change to production email
+// Force Node.js to use IPv4 instead of IPv6 when connecting to Gmail's SMTP servers, 
+// which can help avoid certain connection issues in some environments (like hosting on render.com).
+dns.setDefaultResultOrder('ipv4first');
 
 /**
  * Create email transport configuration based on environment
