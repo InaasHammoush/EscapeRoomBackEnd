@@ -45,6 +45,7 @@ transporter.verify((error) => {
       hasGmailUser: !!process.env.GMAIL_USER,
       hasGmailPassword: !!process.env.GMAIL_PASSWORD,
       gmailUserValue: process.env.GMAIL_USER?.substring(0, 10) + '***',
+      fullError: error, // Log the full error object
     });
   } else {
     log.info("Email service ready to send messages", {
@@ -119,6 +120,7 @@ const emailService = {
 				subject,
 				hasGmailUser: !!process.env.GMAIL_USER,
 				hasGmailPassword: !!process.env.GMAIL_PASSWORD,
+				fullError: error, // Log the full error object
 			});
 
 			throw error; // Re-throw to handle in calling function
@@ -163,6 +165,7 @@ const emailService = {
 				error: error.message,
 				errorCode: error.code,
 				errorResponse: error.response,
+				fullError: error, // Log the full error object
 				stack: error.stack,
 			});
 			throw error; // Re-throw to handle in controller
