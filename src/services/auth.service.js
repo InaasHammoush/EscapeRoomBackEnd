@@ -4,7 +4,7 @@ import crypto from 'crypto';
 
 import * as userModel from '../models/user.model.js';
 import * as passwordResetModel from '../models/passwordReset.model.js';
-import emailService from '../util/nodemailer.js';
+import emailService from '../util/sendgrid.js';
 import { createPendingUserAndSendVerificationEmail } from './registrationFlow.service.js';
 import { verifyRefreshToken } from '../util/token.js';
 import {
