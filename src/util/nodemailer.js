@@ -14,10 +14,10 @@ import log from "./log.js";
  * @type {nodemailer.Transporter}
  */
 const transporter = nodemailer.createTransport({
-    service: "Gmail",
   host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
+  port: 587,             // Change from 465 to 587
+  secure: false,         // Change from true to false (This enables STARTTLS)
+  requireTLS: true,      // Force TLS upgrade
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_PASSWORD,
@@ -37,6 +37,10 @@ const transporter = nodemailer.createTransport({
 // Verify connection configuration on startup
 transporter.verify((error) => {
   if (error) {
+	// Force the raw error to the Render console
+    console.error("============== RAW SMTP ERROR ==============");
+    console.error(error);
+    console.error("============================================");
     log.error("Email transport verification failed", {
       error: error.message,
       errorCode: error.code,
